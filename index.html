@@ -366,6 +366,17 @@ td.down{color:var(--ok);font-weight:600}
 .tarif-grid{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;align-items:center;font-size:14.5px}
 .tarif-grid .range{font-family:'IBM Plex Mono';color:var(--ink-soft)}
 .unit-note{font-size:13px;color:var(--ink-soft);white-space:nowrap}
+/* архив тарифов */
+.arch{margin-top:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.arch summary{padding:11px 14px;font-weight:600;font-size:14px;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
+.arch summary::after{content:'+';font-family:'IBM Plex Mono';color:var(--ink-soft)}
+.arch[open] summary::after{content:'−'}
+.arch .tbl-scroll{padding:0 14px}
+#archTable{font-size:13px}
+#archTable th,#archTable td{padding:6px 8px}
+#archTable th{font-size:10.5px}
+#archTable .flat{color:var(--ink-soft)}     /* плоский тариф — приглушённо, он одинаков по строкам */
+.arch .note{padding:0 14px 12px}
 .tarif-grid input{
   font-family:'IBM Plex Mono';font-size:15px;padding:7px 10px;width:120px;
   border:1px solid var(--line);border-radius:6px;background:var(--input-bg);
@@ -779,6 +790,12 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
       <p class="note" data-i18n="house.note">У домов с электроплитами нет газа, поэтому электричество им вдвое дешевле. Выберите свой тип — иначе счёт разойдётся вдвое.</p>
       <p class="note" data-i18n="tariff.note">Цены можно править — таблица, графики и калькулятор пересчитаются сразу. Значения сохраняются в этом браузере.</p>
       <p class="note" data-i18n-html="tariff.source">Тарифы меняются. Актуальные цены — у поставщика: <a href="https://het.uz/ru/pages/calculator" target="_blank" rel="noopener noreferrer">het.uz</a>.</p>
+      <!-- Архив тарифов: наглядно, что по какой цене считается в каждую эпоху -->
+      <details class="arch">
+        <summary data-i18n="arch.title">Архив тарифов — как считалось раньше</summary>
+        <div class="tbl-scroll"><table id="archTable"></table></div>
+        <p class="note" data-i18n="arch.note">Каждый месяц в расчёте считается по ценам своего времени. Дом с электроплитами платит вдвое меньше во все годы.</p>
+      </details>
     </div>
 
     <div class="card">
@@ -1267,6 +1284,9 @@ ru:{
   'tariff.note':'Цены можно править — таблица, графики и калькулятор пересчитаются сразу. Значения сохраняются в этом браузере.',
   'tariff.price.aria':'Цена блока {n}','tariff.unit':'сум/кВт·ч',
   'tariff.source':'Тарифы меняются. Актуальные цены — у поставщика: <a href="https://het.uz/ru/pages/calculator" target="_blank" rel="noopener noreferrer">het.uz</a>.',
+  'arch.title':'Архив тарифов — как считалось раньше',
+  'arch.note':'Каждый месяц в расчёте считается по ценам своего времени. Дом с электроплитами платит вдвое меньше во все годы. Единая цена без ступеней — это плоский тариф тех лет.',
+  'arch.range.col':'кВт·ч в месяц','arch.from':'с {d}','arch.until':'до {d}','arch.range':'{a} – {b}',
   'sec.calc':'Калькулятор оплаты',
   'calc.prev':'Показание на начало месяца, кВт·ч','calc.prev.ph':'напр. 2051,13',
   'calc.curr':'Новое показание, кВт·ч','calc.curr.ph':'напр. 2266,62',
@@ -1383,6 +1403,9 @@ uz:{
   'tariff.note':'Narxlarni o’zgartirish mumkin — jadval, grafiklar va kalkulyator darhol qayta hisoblanadi. Qiymatlar shu brauzerda saqlanadi.',
   'tariff.price.aria':'{n}-blok narxi','tariff.unit':'so’m/kVt·soat',
   'tariff.source':'Tariflar o’zgaradi. Dolzarb narxlar yetkazib beruvchida: <a href="https://het.uz/oz/pages/calculator" target="_blank" rel="noopener noreferrer">het.uz</a>.',
+  'arch.title':'Tariflar arxivi — ilgari qanday hisoblangan',
+  'arch.note':'Har bir oy o’z vaqtidagi narxlarda hisoblanadi. Elektr plitali uy hamma yillarda ikki barobar kam to’laydi. Bosqichsiz yagona narx — o’sha yillarning tekis tarifi.',
+  'arch.range.col':'oyiga kVt·soat','arch.from':'{d} dan','arch.until':'{d} gacha','arch.range':'{a} – {b}',
   'sec.calc':'To’lov kalkulyatori',
   'calc.prev':'Oy boshidagi ko’rsatkich, kVt·soat','calc.prev.ph':'mas. 2051,13',
   'calc.curr':'Yangi ko’rsatkich, kVt·soat','calc.curr.ph':'mas. 2266,62',
@@ -1499,6 +1522,9 @@ uzc:{
   'tariff.note':'Нархларни ўзгартириш мумкин — жадвал, графиклар ва калькулятор дарҳол қайта ҳисобланади. Қийматлар шу браузерда сақланади.',
   'tariff.price.aria':'{n}-блок нархи','tariff.unit':'сўм/кВт·соат',
   'tariff.source':'Тарифлар ўзгаради. Долзарб нархлар етказиб берувчида: <a href="https://het.uz/oz/pages/calculator" target="_blank" rel="noopener noreferrer">het.uz</a>.',
+  'arch.title':'Тарифлар архиви — илгари қандай ҳисобланган',
+  'arch.note':'Ҳар бир ой ўз вақтидаги нархларда ҳисобланади. Электр плитали уй ҳамма йилларда икки баробар кам тўлайди. Босқичсиз ягона нарх — ўша йилларнинг текис тарифи.',
+  'arch.range.col':'ойига кВт·соат','arch.from':'{d} дан','arch.until':'{d} гача','arch.range':'{a} – {b}',
   'sec.calc':'Тўлов калькулятори',
   'calc.prev':'Ой бошидаги кўрсаткич, кВт·соат','calc.prev.ph':'мас. 2051,13',
   'calc.curr':'Янги кўрсаткич, кВт·соат','calc.curr.ph':'мас. 2266,62',
@@ -2398,6 +2424,35 @@ function renderTariff(){
       saveOverrides(); refresh();
     });
   });
+  renderArchive();
+}
+/* Архив тарифов: все эпохи выбранного типа дома. Плоский тариф (все блоки по одной цене)
+   виден сразу — столбец не растёт по строкам. Строится из TARIFF_PRICES, поэтому цифры
+   всегда совпадают с реальным расчётом. */
+function renderArchive(){
+  const list = TARIFF_PRICES[house] || TARIFF_PRICES.regular;
+  // подпись столбца эпохи: «с {дата}», «{от} – {до}», «до {дата}»
+  const dayBefore = iso => { const d = new Date(iso); d.setDate(d.getDate()-1); return fmtD(d); };
+  const header = (p, i) => {
+    if (i === 0) return t('arch.from', {d: fmtD(new Date(p.from))});          // новейший
+    if (p.from == null) return t('arch.until', {d: fmtD(new Date(list[i-1].from))}); // древнейший
+    return t('arch.range', {a: fmtD(new Date(p.from)), b: dayBefore(list[i-1].from)});
+  };
+  // плоский набор — все цены одинаковы; помечаем, чтобы приглушить визуально
+  const flatCol = p => p.prices.every(x => x === p.prices[0]);
+
+  // 147,5 у электроплит нельзя округлять до 148 — дробные показываем с запятой
+  const money = v => Number.isInteger(v) ? fmt0(v) : fmt1(v);
+  let html = '<thead><tr><th>'+t('arch.range.col')+'</th>' +
+    list.map((p,i)=>'<th class="num">'+header(p,i)+'</th>').join('') + '</tr></thead><tbody>';
+  let lower = 0;
+  BLOCKS.forEach((upto, bi) => {
+    const range = upto == null ? fmt0(lower)+'+' : fmt0(lower)+'–'+fmt0(upto);
+    html += '<tr><td>'+range+'</td>' +
+      list.map(p=>'<td class="num'+(flatCol(p)?' flat':'')+'">'+money(p.prices[bi])+'</td>').join('') + '</tr>';
+    lower = upto ?? lower;
+  });
+  document.getElementById('archTable').innerHTML = html + '</tbody>';
 }
 document.querySelectorAll('#houseSw button').forEach(b=>{
   b.onclick = ()=>{ house = b.dataset.house; saveHouse(); renderTariff(); refresh(); };
