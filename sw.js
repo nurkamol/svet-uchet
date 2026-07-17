@@ -7,7 +7,10 @@
  * При правках index.html поднимайте VERSION — иначе у вернувшихся пользователей
  * останется старая копия оболочки.
  */
-const VERSION = 'v1';
+/* v2: со сменой версии старый SW переустанавливается. Это важно после правки _headers —
+   прежний SW был установлен под connect-src 'none' и не мог кешировать; новый ставится
+   под свободным CSP и работает. Старые кеши подчистит activate. */
+const VERSION = 'v2';
 const SHELL   = 'svetuchet-shell-' + VERSION;
 const RUNTIME = 'svetuchet-cdn-' + VERSION;
 

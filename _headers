@@ -1,16 +1,28 @@
-# Заголовки для Cloudflare Pages. Локальный python -m http.server их не отдаёт,
-# поэтому та же CSP продублирована мета-тегом в index.html — так защита работает
-# и на любом другом хостинге, и при открытии файла напрямую.
-# ВАЖНО: при правке политики менять оба места.
+# Заголовки для Cloudflare Pages. Та же CSP продублирована мета-тегом в index.html —
+# так защита работает и при открытии файла напрямую, и на любом хостинге.
+# ВАЖНО: при правке политики менять оба места (тест security.test.js сверяет их).
+#
+# CSP вешаем ТОЛЬКО на HTML-документ (/ и /index.html), а НЕ на /*.
+# Причина: service worker берёт свой CSP из заголовков своего скрипта. С connect-src
+# 'none' он не может ничего закешировать (fetch блокируется) — и офлайн, шрифты,
+# графики ломаются. Странице connect-src 'none' нужен, service worker'у — нет.
+# frame-ancestors всё равно работает только в заголовке документа, так что HTML — верное
+# место для CSP; на прочие файлы (sw.js, картинки) политика не нужна.
 
-/*
+/
   Content-Security-Policy: default-src 'none'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'none'; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'
+
+/index.html
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'none'; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'
+
+# Прочие защитные заголовки — на всё; CSP среди них НЕТ намеренно (см. выше).
+/*
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   Cross-Origin-Opener-Policy: same-origin
   Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=(), interest-cohort=()
 
-# Service worker не должен кешироваться: иначе обновление приложения не доедет
-# до тех, у кого он уже стоит.
+# Service worker не должен кешироваться: иначе обновление не доедет до тех, у кого он
+# уже стоит. CSP на него не вешаем (см. выше) — иначе он не сможет кешировать.
 /sw.js
   Cache-Control: no-cache
