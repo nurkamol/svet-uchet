@@ -599,14 +599,13 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
          На экране не показываем — там есть редактируемая карточка тарифов. -->
     <section id="printTariff" class="hidden">
       <div class="card">
-        <div class="sec-head"><h2 data-i18n="print.tariff">Тарифы, по которым выполнен расчёт</h2></div>
+        <div class="sec-head">
+          <h2 data-i18n="print.tariff">Тарифы, по которым выполнен расчёт</h2>
+          <span class="sub" id="printHouse"></span>
+        </div>
         <div class="tbl-scroll">
           <table id="printTariffTable">
-            <thead><tr>
-              <th data-i18n="print.block">Блок</th>
-              <th data-i18n="print.range">кВт·ч в месяц</th>
-              <th data-i18n="print.price">Цена, сум/кВт·ч</th>
-            </tr></thead>
+            <thead><tr></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -627,7 +626,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
         <div class="err hidden" id="cmpErr"></div>
 
         <div id="cmpBody" class="hidden">
-          <div class="cmp-modes no-print" role="group" data-i18n-aria="cmp.mode.aria">
+          <div class="cmp-modes no-print" id="cmpModes" role="group" data-i18n-aria="cmp.mode.aria">
             <button type="button" data-mode="year" data-i18n="cmp.mode.year">Год к году</button>
             <button type="button" data-mode="order" data-i18n="cmp.mode.order">По порядку (до/после)</button>
           </div>
@@ -666,7 +665,13 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
         <span class="spacer"></span>
         <button class="btn no-print" id="btnTarifReset" data-i18n="btn.reset">Сбросить</button>
       </div>
+      <!-- Тип дома: у домов с электроплитами нет газа, поэтому им ровно половина цены -->
+      <div class="cmp-modes no-print" id="houseSw" role="group" data-i18n-aria="house.aria">
+        <button type="button" data-house="regular" data-i18n="house.regular">Обычный дом</button>
+        <button type="button" data-house="stove" data-i18n="house.stove">Дом с электроплитами</button>
+      </div>
       <div class="tarif-grid" id="tarifGrid"></div>
+      <p class="note" data-i18n="house.note">У домов с электроплитами нет газа, поэтому электричество им вдвое дешевле. Выберите свой тип — иначе счёт разойдётся вдвое.</p>
       <p class="note" data-i18n="tariff.note">Цены можно править — таблица, графики и калькулятор пересчитаются сразу. Значения сохраняются в этом браузере.</p>
       <p class="note" data-i18n-html="tariff.source">Тарифы меняются. Актуальные цены — у поставщика: <a href="https://het.uz/ru/pages/calculator" target="_blank" rel="noopener noreferrer">het.uz</a>.</p>
     </div>
@@ -712,14 +717,54 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
 
 <script>
 /* ============ ЯДРО РАСЧЁТОВ ============ */
-const DEFAULT_TARIFF = [
-  {upto:200,   price:650},
-  {upto:500,   price:900},
-  {upto:1000,  price:1100},
-  {upto:5000,  price:1600},
-  {upto:10000, price:1900},
-  {upto:null,  price:2200},
-];
+/* ---- тарифы ----
+   Источник: калькулятор поставщика het.uz. Цены восстановлены из его выдачи и сверены
+   обратным пересчётом до сума — см. docs/tariffs.md.
+
+   Два измерения, и приложение обязано учитывать оба:
+   • тип дома — у домов с электроплитами нет газа, поэтому им ровно половина цены;
+   • период — цены сменились 1 июня 2026. Смена пришлась на 1-е число, поэтому месяц
+     не приходится делить между двумя тарифами: он целиком под одним.
+
+   Периоды идут от новых к старым; from:null — «всё, что раньше». Когда цены поднимут
+   снова, достаточно дописать сюда набор с новой датой — остальной код не тронется. */
+const BLOCKS = [200, 500, 1000, 5000, 10000, null];   // границы блоков, общие для всех наборов
+const TARIFF_PRICES = {
+  regular: [
+    {from:'2026-06-01', prices:[650, 900, 1100, 1600, 1900, 2200]},
+    {from:null,         prices:[600, 800, 1000, 1500, 1750, 2000]},
+  ],
+  stove: [
+    {from:'2026-06-01', prices:[325, 450, 550, 800, 950, 1100]},
+    {from:null,         prices:[300, 400, 500, 750, 875, 1000]},
+  ],
+};
+const HOUSE_TYPES = ['regular', 'stove'];
+const toTariff = prices => BLOCKS.map((upto, i) => ({upto, price: prices[i]}));
+
+/* Действующий тариф обычного дома: первый период в списке — самый новый. */
+const DEFAULT_TARIFF = toTariff(TARIFF_PRICES.regular[0].prices);
+
+/* Какой период цен действовал в месяце (y, m). Сравниваем по «году·месяцу», а не по
+   датам: смена всегда с 1-го числа, и так не надо думать про часовые пояса. */
+function tariffPeriod(y, m, house){
+  const list = TARIFF_PRICES[house] || TARIFF_PRICES.regular;
+  const key = y * 100 + m;
+  for (const p of list){
+    if (p.from == null) return p;
+    const [fy, fm] = p.from.split('-').map(Number);
+    if (key >= fy * 100 + (fm - 1)) return p;
+  }
+  return list[list.length - 1];
+}
+/* Цены на месяц. override — то, что человек вписал руками: применяется только к
+   текущему (самому новому) периоду. Прошлое уже случилось, править его нечего. */
+function tariffFor(y, m, house, override){
+  const list = TARIFF_PRICES[house] || TARIFF_PRICES.regular;
+  const period = tariffPeriod(y, m, house);
+  const useOverride = override && override.length === BLOCKS.length && period === list[0];
+  return toTariff(useOverride ? override : period.prices);
+}
 /* Языки: ru — русский, uz — узбекский (латиница), uzc — узбекский (кириллица).
    Везде lang необязателен и по умолчанию 'ru'. */
 const MONTHS = {
@@ -908,22 +953,30 @@ function analyzeManual(readings){
    вставляет, поэтому кладём МИНИМУМ: месяц, расход, тариф. Ни суточного ряда (по нему
    видно, когда хозяев не было дома), ни имени файла, ни статусов счётчика.
 
-   Формат: v1~<год_месяц_кВт·ч!...>~<цены_тарифа>
+   Формат: v2~<тип дома>~<год_месяц_кВт·ч!...>~<цены текущего периода>
    Разделители — только те, что encodeURIComponent не трогает (~ _ ! .), иначе ссылка
    поломается при пересылке. Точка занята дробной частью, поэтому поля разделяет «_»:
-   с точкой «307.2» распалось бы на 307 и 2, и получатель увидел бы другую сумму. */
-function encodeShare(months, tariff){
+   с точкой «307.2» распалось бы на 307 и 2, и получатель увидел бы другую сумму.
+
+   Тип дома обязателен: у дома с электроплитами цена вдвое меньше, и без него получатель
+   увидел бы сумму вдвое больше отправителя. Цены прошлых периодов не шлём — они
+   встроенные и одинаковы у всех; в ссылке едут только текущие, вместе с правкой
+   отправителя, если он её делал. */
+const SHARE_HOUSE = {regular:'r', stove:'s'};
+const SHARE_HOUSE_BACK = {r:'regular', s:'stove'};
+function encodeShare(months, house, prices){
   /* Два знака, а не один: расход 269,88 при округлении до 269,9 даёт другую сумму,
      и итог у получателя разъезжается с итогом отправителя. Ссылка от этого длиннее
      на пару символов — цена того стоит. */
   const m = months.map(x => [x.y, x.m, Math.round(x.kwh * 100) / 100].join('_')).join('!');
-  const t = tariff.map(b => b.price).join('_');
-  return 'v1~' + m + '~' + t;
+  return ['v2', SHARE_HOUSE[house] || 'r', m, prices.join('_')].join('~');
 }
 function decodeShare(s){
   const parts = String(s || '').split('~');
-  if (parts[0] !== 'v1' || parts.length !== 3) throw new Error('E_SHARE_BAD');
-  const months = parts[1].split('!').filter(Boolean).map(chunk => {
+  if (parts[0] !== 'v2' || parts.length !== 4) throw new Error('E_SHARE_BAD');
+  const house = SHARE_HOUSE_BACK[parts[1]];
+  if (!house) throw new Error('E_SHARE_BAD');
+  const months = parts[2].split('!').filter(Boolean).map(chunk => {
     const nums = chunk.split('_');
     if (nums.length !== 3) throw new Error('E_SHARE_BAD');
     const [y, m, kwh] = nums.map(Number);
@@ -934,11 +987,10 @@ function decodeShare(s){
             from:new Date(y, m, 1), to:new Date(y, m, dim)};
   });
   if (!months.length) throw new Error('E_SHARE_BAD');
-  const prices = parts[2].split('_').map(Number);
-  if (prices.length !== DEFAULT_TARIFF.length || prices.some(p => !isFinite(p) || p < 0))
+  const prices = parts[3].split('_').map(Number);
+  if (prices.length !== BLOCKS.length || prices.some(p => !isFinite(p) || p < 0))
     throw new Error('E_SHARE_BAD');
-  const tariff = DEFAULT_TARIFF.map((b, i) => ({upto:b.upto, price:prices[i]}));
-  return {months, tariff};
+  return {months, house, prices};
 }
 
 /* ---- сравнение двух выгрузок ----
@@ -946,8 +998,12 @@ function decodeShare(s){
    'year'  — январь с январём (сезонность снята, видно изменение образа жизни);
    'order' — первый месяц с первым (до/после кондиционера, сезонность НЕ снята,
              поэтому сравнивать так осмысленно лишь равные по длине куски года).
-   Возвращаем только пары, где есть оба месяца: неполные пары врут. */
-function compareMonths(monthsA, monthsB, mode, tariff){
+   Возвращаем только пары, где есть оба месяца: неполные пары врут.
+
+   tariffOf — функция (месяц) → цены: у месяцев из разных лет тариф разный, одним
+   набором на всё сравнение считать нельзя. Именно в сравнении год-к-году это и
+   вылезает первым делом. */
+function compareMonths(monthsA, monthsB, mode, tariffOf){
   const pairs = [];
   if (mode === 'order'){
     const n = Math.min(monthsA.length, monthsB.length);
@@ -961,7 +1017,7 @@ function compareMonths(monthsA, monthsB, mode, tariff){
     }
   }
   const rows = pairs.map(([a, b]) => {
-    const costA = blockCost(a.kwh, tariff), costB = blockCost(b.kwh, tariff);
+    const costA = blockCost(a.kwh, tariffOf(a)), costB = blockCost(b.kwh, tariffOf(b));
     return {a, b,
       dKwh: b.kwh - a.kwh,
       dCost: costB - costA,
@@ -1061,6 +1117,10 @@ ru:{
   'cmp.th.was':'Было, кВт·ч','cmp.th.now':'Стало, кВт·ч','cmp.th.dkwh':'Δ кВт·ч','cmp.th.pct':'Δ %','cmp.th.dcost':'Δ сум',
   'cmp.total':'Итого по общим месяцам',
   'sec.tariff':'Тарифы','sec.tariff.sub':'сум за кВт·ч, в месяц','btn.reset':'Сбросить',
+  'house.aria':'Тип дома','house.regular':'Обычный дом','house.stove':'Дом с электроплитами',
+  'house.note':'У домов с электроплитами нет газа, поэтому электричество им вдвое дешевле. Выберите свой тип — иначе счёт разойдётся вдвое.',
+  'print.from':'с {d}','print.until':'до {d}',
+  'alert.tariff.changed':'В периоде сменился тариф: месяцы до {d} посчитаны по прежним ценам, дальше — по новым. Так и должно быть — цены менял поставщик.',
   'tariff.note':'Цены можно править — таблица, графики и калькулятор пересчитаются сразу. Значения сохраняются в этом браузере.',
   'tariff.price.aria':'Цена блока {n}','tariff.unit':'сум/кВт·ч',
   'tariff.source':'Тарифы меняются. Актуальные цены — у поставщика: <a href="https://het.uz/ru/pages/calculator" target="_blank" rel="noopener noreferrer">het.uz</a>.',
@@ -1160,6 +1220,10 @@ uz:{
   'cmp.th.was':'Edi, kVt·soat','cmp.th.now':'Bo’ldi, kVt·soat','cmp.th.dkwh':'Δ kVt·soat','cmp.th.pct':'Δ %','cmp.th.dcost':'Δ so’m',
   'cmp.total':'Umumiy oylar bo’yicha jami',
   'sec.tariff':'Tariflar','sec.tariff.sub':'oyiga kVt·soat uchun so’m','btn.reset':'Tiklash',
+  'house.aria':'Uy turi','house.regular':'Oddiy uy','house.stove':'Elektr plitali uy',
+  'house.note':'Elektr plitali uylarda gaz yo’q, shuning uchun elektr ular uchun ikki barobar arzon. O’z turingizni tanlang — aks holda hisob ikki barobar farq qiladi.',
+  'print.from':'{d} dan','print.until':'{d} gacha',
+  'alert.tariff.changed':'Davr ichida tarif o’zgargan: {d} gacha bo’lgan oylar avvalgi narxlarda, keyingilari yangi narxlarda hisoblangan. Shunday bo’lishi kerak — narxlarni yetkazib beruvchi o’zgartirgan.',
   'tariff.note':'Narxlarni o’zgartirish mumkin — jadval, grafiklar va kalkulyator darhol qayta hisoblanadi. Qiymatlar shu brauzerda saqlanadi.',
   'tariff.price.aria':'{n}-blok narxi','tariff.unit':'so’m/kVt·soat',
   'tariff.source':'Tariflar o’zgaradi. Dolzarb narxlar yetkazib beruvchida: <a href="https://het.uz/oz/pages/calculator" target="_blank" rel="noopener noreferrer">het.uz</a>.',
@@ -1259,6 +1323,10 @@ uzc:{
   'cmp.th.was':'Эди, кВт·соат','cmp.th.now':'Бўлди, кВт·соат','cmp.th.dkwh':'Δ кВт·соат','cmp.th.pct':'Δ %','cmp.th.dcost':'Δ сўм',
   'cmp.total':'Умумий ойлар бўйича жами',
   'sec.tariff':'Тарифлар','sec.tariff.sub':'ойига кВт·соат учун сўм','btn.reset':'Тиклаш',
+  'house.aria':'Уй тури','house.regular':'Оддий уй','house.stove':'Электр плитали уй',
+  'house.note':'Электр плитали уйларда газ йўқ, шунинг учун электр улар учун икки баробар арзон. Ўз турингизни танланг — акс ҳолда ҳисоб икки баробар фарқ қилади.',
+  'print.from':'{d} дан','print.until':'{d} гача',
+  'alert.tariff.changed':'Давр ичида тариф ўзгарган: {d} гача бўлган ойлар аввалги нархларда, кейингилари янги нархларда ҳисобланган. Шундай бўлиши керак — нархларни етказиб берувчи ўзгартирган.',
   'tariff.note':'Нархларни ўзгартириш мумкин — жадвал, графиклар ва калькулятор дарҳол қайта ҳисобланади. Қийматлар шу браузерда сақланади.',
   'tariff.price.aria':'{n}-блок нархи','tariff.unit':'сўм/кВт·соат',
   'tariff.source':'Тарифлар ўзгаради. Долзарб нархлар етказиб берувчида: <a href="https://het.uz/oz/pages/calculator" target="_blank" rel="noopener noreferrer">het.uz</a>.',
@@ -1311,7 +1379,8 @@ function t(key, params){
 
 /* ---------- состояние ---------- */
 let lang = loadLang();
-let tariff = loadTariff();
+let house = loadHouse();          // 'regular' | 'stove' — дом с электроплитами платит вдвое меньше
+let overrides = loadOverrides();  // цены, вписанные руками: {regular:[…]|null, stove:[…]|null}
 let A = null;          // результат analyze
 let charts = {};
 let fileName = null;   // как подписать источник данных
@@ -1406,14 +1475,73 @@ document.querySelectorAll('#langsw button').forEach(b=>{
   b.onclick = ()=>applyLang(b.dataset.lang);
 });
 
-function loadTariff(){
+function loadHouse(){
   try{
-    const s = localStorage.getItem('svetuchet_tariff_v1');
-    if (s){ const t = JSON.parse(s); if (Array.isArray(t) && t.length===6) return t; }
+    const s = localStorage.getItem('svetuchet_house_v1');
+    if (HOUSE_TYPES.includes(s)) return s;
   }catch(e){}
-  return DEFAULT_TARIFF.map(b=>({...b}));
+  return 'regular';   // ошибка в эту сторону безопаснее: счёт завышен, а не занижен
 }
-function saveTariff(){ try{ localStorage.setItem('svetuchet_tariff_v1', JSON.stringify(tariff)); }catch(e){} }
+function saveHouse(){ try{ localStorage.setItem('svetuchet_house_v1', house); }catch(e){} }
+
+/* Объявлением, а не const: loadOverrides() зовётся из блока состояния — выше по файлу.
+   С const тут был бы ReferenceError из temporal dead zone, который try/catch внутри
+   loadOverrides молча проглотил бы, и правки пользователя пропадали бы при обновлении. */
+function okPrices(p){
+  return Array.isArray(p) && p.length === BLOCKS.length &&
+         p.every(x => isFinite(x) && x >= 0);
+}
+/* v1 хранил один массив {upto, price} — это были текущие цены обычного дома.
+   Переносим их в новый формат, чтобы у тех, кто уже правил тарифы, ничего не пропало. */
+function loadOverrides(){
+  const out = {regular:null, stove:null};
+  try{
+    const s = localStorage.getItem('svetuchet_tariff_v2');
+    if (s){
+      const o = JSON.parse(s);
+      for (const h of HOUSE_TYPES) if (okPrices(o && o[h])) out[h] = o[h];
+      return out;
+    }
+    const old = localStorage.getItem('svetuchet_tariff_v1');
+    if (old){
+      const t = JSON.parse(old);
+      if (Array.isArray(t) && t.length === BLOCKS.length){
+        const p = t.map(b => b && b.price);
+        if (okPrices(p)) out.regular = p;
+      }
+    }
+  }catch(e){}
+  return out;
+}
+function saveOverrides(){
+  try{ localStorage.setItem('svetuchet_tariff_v2', JSON.stringify(overrides)); }catch(e){}
+}
+
+/* Тариф месяца. Данные из ссылки считаем ценами отправителя: получатель обязан увидеть
+   его цифры, а не свои — иначе ссылка врёт. */
+const tariffOf = mo => (A && A.shared)
+  ? tariffFor(mo.y, mo.m, A.shareHouse, A.sharePrices)
+  : tariffFor(mo.y, mo.m, house, overrides[house]);
+/* Цены «сейчас» — для калькулятора и редактируемой карточки. */
+const today = new Date();
+const currentTariff = () => tariffFor(today.getFullYear(), today.getMonth(), house, overrides[house]);
+/* Какими наборами цен реально считали. Если больше одного — период пересекает смену
+   тарифа, и об этом надо сказать, а не считать молча.
+   until берём из даты начала следующего (более нового) набора: сам период своего конца
+   не знает, а в отчёте надо написать «до такого-то». */
+const tariffPeriodsUsed = months => {
+  const h = (A && A.shared) ? A.shareHouse : house;
+  const list = TARIFF_PRICES[h] || TARIFF_PRICES.regular;
+  const seen = new Map();
+  for (const mo of months){
+    const p = tariffPeriod(mo.y, mo.m, h);
+    if (seen.has(p.from)) continue;
+    const i = list.indexOf(p);
+    seen.set(p.from, {from: p.from, until: i > 0 ? list[i-1].from : null, tariff: tariffOf(mo)});
+  }
+  // от старых к новым: null-период самый старый
+  return [...seen.values()].sort((a, b) => String(a.from || '').localeCompare(String(b.from || '')));
+};
 
 /* ---------- утилиты формата ---------- */
 const fmt0 = n => new Intl.NumberFormat('ru-RU').format(Math.round(n));
@@ -1582,8 +1710,10 @@ function analyzeShared(months){
 }
 document.getElementById('btnShare').onclick = ()=>{
   if (!A) return;
+  const h = A.shared ? A.shareHouse : house;
+  const p = A.shared ? A.sharePrices : currentTariff().map(b => b.price);
   const url = location.origin + location.pathname +
-              (lang === 'ru' ? '' : '?lang=' + lang) + '#d=' + encodeShare(A.months, tariff);
+              (lang === 'ru' ? '' : '?lang=' + lang) + '#d=' + encodeShare(A.months, h, p);
   document.getElementById('shareUrl').value = url;
   shareBox.classList.toggle('hidden');
   if (!shareBox.classList.contains('hidden')) document.getElementById('shareUrl').select();
@@ -1597,15 +1727,17 @@ document.getElementById('btnShareCopy').onclick = async ()=>{
   btn.textContent = t('share.copied');
   setTimeout(()=>{ btn.textContent = t('share.copy'); }, 1600);
 };
-/* Открыли присланную ссылку — показываем расчёт. Тариф берём из ссылки: иначе цифры
-   получателя разъедутся с тем, что видел отправитель. */
+/* Открыли присланную ссылку — показываем расчёт цифрами отправителя: его тип дома и его
+   цены. Но в сохранённые настройки получателя не лезем: цены отправителя живут на самом
+   расчёте (A.shareHouse / A.sharePrices), а не в localStorage. Иначе одна открытая
+   чужая ссылка молча переписала бы человеку его собственные тарифы. */
 function loadFromHash(){
   const h = location.hash.replace(/^#/, '');
   if (!h.startsWith('d=')) return false;
   try{
-    const {months, tariff:t2} = decodeShare(decodeURIComponent(h.slice(2)));
-    tariff = t2; saveTariff(); renderTariff();
+    const {months, house:h2, prices} = decodeShare(decodeURIComponent(h.slice(2)));
     A = analyzeShared(months);
+    A.shareHouse = h2; A.sharePrices = prices;
     render(null, false, false);
     fileIsShared = true;
     paintResults();
@@ -1714,7 +1846,8 @@ document.getElementById('btnCmpClear').onclick = ()=>{
   document.getElementById('cmpErr').classList.add('hidden');
   document.getElementById('cmpSub').textContent = t('cmp.hint');
 };
-document.querySelectorAll('.cmp-modes button').forEach(b=>{
+// строго по id: класс .cmp-modes носит ещё и переключатель типа дома
+document.querySelectorAll('#cmpModes button').forEach(b=>{
   b.onclick = ()=>{ cmpMode = b.dataset.mode; renderCompare(); };
 });
 
@@ -1725,13 +1858,13 @@ function renderCompare(){
   document.getElementById('cmpErr').classList.add('hidden');
   document.getElementById('cmpBody').classList.remove('hidden');
   document.getElementById('btnCmpClear').classList.remove('hidden');
-  document.querySelectorAll('.cmp-modes button').forEach(b=>
+  document.querySelectorAll('#cmpModes button').forEach(b=>
     b.setAttribute('aria-pressed', String(b.dataset.mode === cmpMode)));
   document.getElementById('cmpModeNote').textContent = t('cmp.mode.note.' + cmpMode);
   document.getElementById('cmpBadgeA').textContent = '📄 ' + sourceLabel();
   document.getElementById('cmpBadgeB').textContent = '📄 ' + fileNameB;
 
-  const c = compareMonths(A.months, B.months, cmpMode, tariff);
+  const c = compareMonths(A.months, B.months, cmpMode, tariffOf);
   const tb = document.querySelector('#cmpTable tbody'); tb.innerHTML = '';
   if (!c.rows.length){
     document.getElementById('cmpSub').textContent = t('cmp.nopairs');
@@ -1840,16 +1973,29 @@ function renderPrintBits(){
   document.getElementById('printTitle').textContent = t('print.title');
   document.getElementById('printMeta').textContent =
     [sourceLabel(), fmtD(A.firstDate)+' — '+fmtD(A.lastDate), t('print.made', {d: fmtD(new Date())})].join(' · ');
+  /* Показываем все наборы цен, которыми реально считали. Если период пересекает смену
+     тарифа — в отчёте будет два столбца, и видно, где какой применялся. */
+  const used = tariffPeriodsUsed(A.months);
+  /* Заголовок колонки: «с такого-то» для нового набора, «до такого-то» для старого.
+     Если границ вокруг набора нет вовсе — просто «Цена»: выдумывать дату нельзя. */
+  const colTitle = u => u.from  ? t('print.from',  {d: fmtD(new Date(u.from))})
+                      : u.until ? t('print.until', {d: fmtD(new Date(u.until))})
+                      : t('print.price');
+  const head = document.querySelector('#printTariffTable thead tr');
+  head.innerHTML = '<th>'+t('print.block')+'</th><th>'+t('print.range')+'</th>' +
+    used.map(u => '<th>'+colTitle(u)+'</th>').join('');
   const tb = document.querySelector('#printTariffTable tbody');
   tb.innerHTML = '';
   let lower = 0;
-  tariff.forEach((b, i) => {
-    const range = b.upto == null ? fmt0(lower)+'+' : fmt0(lower)+'–'+fmt0(b.upto);
+  BLOCKS.forEach((upto, i) => {
+    const range = upto == null ? fmt0(lower)+'+' : fmt0(lower)+'–'+fmt0(upto);
     tb.insertAdjacentHTML('beforeend',
       '<tr><td>'+t('print.blockN', {n:i+1})+'</td><td class="num">'+range+'</td>'+
-      '<td class="num">'+fmt0(b.price)+'</td></tr>');
-    lower = b.upto ?? lower;
+      used.map(u => '<td class="num">'+fmt0(u.tariff[i].price)+'</td>').join('')+'</tr>');
+    lower = upto ?? lower;
   });
+  document.getElementById('printHouse').textContent =
+    t(((A && A.shared) ? A.shareHouse : house) === 'stove' ? 'house.stove' : 'house.regular');
 }
 function render(fname, isDemo, isManual){
   fileName = fname; fileIsDemo = !!isDemo; fileIsManual = !!isManual; fileIsShared = false;
@@ -1861,7 +2007,7 @@ function render(fname, isDemo, isManual){
 
 function totals(){
   const kwh = A.months.reduce((s,m)=>s+m.kwh,0);
-  const cost = A.months.reduce((s,m)=>s+blockCost(m.kwh,tariff),0);
+  const cost = A.months.reduce((s,m)=>s+blockCost(m.kwh,tariffOf(m)),0);
   return {kwh, cost};
 }
 function renderSummary(){
@@ -1891,6 +2037,13 @@ function renderAlerts(){
     const worst = [...bad].sort((a,b)=>b.kwh-a.kwh)[0];
     add(t('alert.implausible', {k: fmt1(worst.kwh), d: fmtD(worst.date), n: bad.length}));
   }
+  /* Период пересекает смену тарифа — сказать об этом. Иначе человек увидит, что за
+     одинаковый расход в разные месяцы начислено разное, и решит, что мы ошиблись. */
+  const periods = tariffPeriodsUsed(A.months);
+  if (periods.length > 1){
+    const changed = periods.map(p => p.from).filter(Boolean).sort();
+    add(t('alert.tariff.changed', {d: fmtD(new Date(changed[0]))}), true);
+  }
   // статусы счётчика
   for (const s of A.statuses){
     const range = fmtD(s.from) + (s.to ? ' — '+fmtD(s.to) : t('alert.range.now'));
@@ -1900,9 +2053,10 @@ function renderAlerts(){
   // прогноз и граница блока
   const {mo, fc} = currentMonthInfo();
   if (mo.partial){
-    const cost = blockCost(fc, tariff);
+    const tf = tariffOf(mo);
+    const cost = blockCost(fc, tf);
     let boundary = null, lower = 0;
-    for (const b of tariff){ if (b.upto!=null && fc < b.upto && b.upto - fc <= Math.max(30, fc*0.12)){ boundary=b.upto; break; } lower = b.upto; }
+    for (const b of tf){ if (b.upto!=null && fc < b.upto && b.upto - fc <= Math.max(30, fc*0.12)){ boundary=b.upto; break; } lower = b.upto; }
     add(t('alert.month', {m:monthLabel(mo.y,mo.m,lang), k:fmt1(mo.kwh), d:mo.days, f:fmt1(fc), c:fmt0(cost)}), true);
     if (boundary) add(t('alert.boundary', {b:fmt0(boundary)}));
   }
@@ -1922,8 +2076,8 @@ function renderMonthTable(){
   const tb = document.querySelector('#monthTable tbody'); tb.innerHTML='';
   let totKwh=0, totCost=0;
   for (const mo of A.months){
-    const br = blockBreakdown(mo.kwh, tariff);
-    const cost = blockCost(mo.kwh, tariff);
+    const br = blockBreakdown(mo.kwh, tariffOf(mo));
+    const cost = blockCost(mo.kwh, tariffOf(mo));
     totKwh+=mo.kwh; totCost+=cost;
     const b4 = br[3].kwh+br[4].kwh+br[5].kwh;
     const tag = mo.partial ? ' <span class="tag">'+fmtD(mo.from)+'–'+fmtD(mo.to)+'</span>' : '';
@@ -1935,7 +2089,7 @@ function renderMonthTable(){
   const {mo, fc} = currentMonthInfo();
   if (mo.partial){
     tb.insertAdjacentHTML('beforeend',
-      '<tr class="forecast"><td>'+t('table.forecast',{m:monthLabel(mo.y,mo.m,lang)})+'</td><td class="num">'+fmt1(fc)+'</td><td colspan="4"></td><td class="money">'+fmt0(blockCost(fc,tariff))+'</td><td class="num">'+fmt1(mo.days?mo.kwh/mo.days:0)+'</td></tr>');
+      '<tr class="forecast"><td>'+t('table.forecast',{m:monthLabel(mo.y,mo.m,lang)})+'</td><td class="num">'+fmt1(fc)+'</td><td colspan="4"></td><td class="money">'+fmt0(blockCost(fc,tariffOf(mo)))+'</td><td class="num">'+fmt1(mo.days?mo.kwh/mo.days:0)+'</td></tr>');
   }
   tb.insertAdjacentHTML('beforeend',
     '<tr class="total"><td>'+t('table.total')+'</td><td class="num">'+fmt1(totKwh)+'</td><td colspan="4"></td><td class="money">'+fmt0(totCost)+'</td><td></td></tr>');
@@ -1979,7 +2133,7 @@ function renderCharts(){
 
   const labels = A.months.map(m=>monthNames(lang)[m.m].slice(0,3)+' '+String(m.y).slice(2));
   const kwh = A.months.map(m=>+m.kwh.toFixed(1));
-  const cost = A.months.map(m=>blockCost(m.kwh,tariff));
+  const cost = A.months.map(m=>blockCost(m.kwh,tariffOf(m)));
 
   charts.month?.destroy();
   charts.month = new Chart(document.getElementById('chMonth'), {
@@ -2018,10 +2172,14 @@ function renderCharts(){
 }
 
 /* ---------- тарифы ---------- */
+/* Карточка показывает цены ТЕКУЩЕГО периода выбранного типа дома — их и правят.
+   Прошлые цены не редактируются: они уже случились. */
 function renderTariff(){
+  document.querySelectorAll('#houseSw button').forEach(b=>
+    b.setAttribute('aria-pressed', String(b.dataset.house === house)));
   const g = document.getElementById('tarifGrid'); g.innerHTML='';
   let lower=0;
-  tariff.forEach((b,i)=>{
+  currentTariff().forEach((b,i)=>{
     const u = t('unit.kwh');
     const range = b.upto==null ? fmt0(lower)+'+ '+u : fmt0(lower)+'–'+fmt0(b.upto)+' '+u;
     g.insertAdjacentHTML('beforeend',
@@ -2032,12 +2190,21 @@ function renderTariff(){
   g.querySelectorAll('input').forEach(inp=>{
     inp.addEventListener('input', ()=>{
       const v = parseNum(inp.value);
-      if (isFinite(v) && v>=0){ tariff[+inp.dataset.i].price = v; saveTariff(); refresh(); }
+      if (!isFinite(v) || v < 0) return;
+      // правка — это override поверх встроенных цен, отдельный для каждого типа дома
+      const base = overrides[house] || currentTariff().map(b=>b.price);
+      base[+inp.dataset.i] = v;
+      overrides[house] = base;
+      saveOverrides(); refresh();
     });
   });
 }
+document.querySelectorAll('#houseSw button').forEach(b=>{
+  b.onclick = ()=>{ house = b.dataset.house; saveHouse(); renderTariff(); refresh(); };
+});
 document.getElementById('btnTarifReset').onclick = ()=>{
-  tariff = DEFAULT_TARIFF.map(b=>({...b})); saveTariff(); renderTariff(); refresh();
+  overrides[house] = null;   // сбрасываем только выбранный тип дома
+  saveOverrides(); renderTariff(); refresh();
 };
 function refresh(){
   if (A) paintResults();
@@ -2067,17 +2234,18 @@ function runCalc(){
   }
   const kwh = c - p;
   $('oKwh').textContent = fmt1(kwh)+' '+t('unit.kwh');
-  blockBreakdown(kwh, tariff).forEach((b,i)=>{
+  const ct = currentTariff();
+  blockBreakdown(kwh, ct).forEach((b,i)=>{
     if (b.kwh>0) out.insertAdjacentHTML('beforeend',
       '<div class="calc-row"><span style="color:var(--ink-soft)">'+t('calc.block',{n:i+1, k:fmt1(b.kwh), p:fmt0(b.price)})+'</span><span class="v">'+fmt0(b.cost)+' '+t('unit.sum')+'</span></div>');
   });
-  $('oCost').textContent = fmt0(blockCost(kwh,tariff))+' '+t('unit.sum');
+  $('oCost').textContent = fmt0(blockCost(kwh,ct))+' '+t('unit.sum');
   if (isFinite(days) && days>0 && isFinite(dim) && dim>=days){
     const fc = kwh/days*dim;
     $('oFcKwh').textContent = fmt1(fc)+' '+t('unit.kwh');
-    $('oFcCost').textContent = fmt0(blockCost(fc,tariff))+' '+t('unit.sum');
+    $('oFcCost').textContent = fmt0(blockCost(fc,ct))+' '+t('unit.sum');
     let warn=''; let lower=0;
-    for (const b of tariff){ if (b.upto!=null && kwh < b.upto && fc >= b.upto){ warn=t('calc.warn.cross',{b:fmt0(b.upto), p:fmt0(tariff[tariff.indexOf(b)+1].price)}); break;} }
+    for (const b of ct){ if (b.upto!=null && kwh < b.upto && fc >= b.upto){ warn=t('calc.warn.cross',{b:fmt0(b.upto), p:fmt0(ct[ct.indexOf(b)+1].price)}); break;} }
     $('oWarn').textContent = warn;
   } else {
     $('oFcKwh').textContent = $('oFcCost').textContent = '—'; $('oWarn').textContent='';
@@ -2090,7 +2258,7 @@ document.getElementById('btnCsv').onclick = ()=>{
   let csv = t('csv.header')+'\n';
   let tk=0,tc=0;
   for (const mo of A.months){
-    const cost = blockCost(mo.kwh,tariff); tk+=mo.kwh; tc+=cost;
+    const cost = blockCost(mo.kwh,tariffOf(mo)); tk+=mo.kwh; tc+=cost;
     csv += [monthLabel(mo.y,mo.m,lang), mo.kwh.toFixed(2).replace('.',','), cost, mo.days, (mo.days?mo.kwh/mo.days:0).toFixed(2).replace('.',',')].join(';')+'\n';
   }
   csv += [t('csv.total'), tk.toFixed(2).replace('.',','), tc, '', ''].join(';')+'\n';
