@@ -442,7 +442,10 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
   /* Липкая шапка на 320px занимала 217px — 38% экрана, и постоянно. На телефоне пусть
      уезжает при прокрутке: содержимое важнее навигации. */
   header{position:static}
-  .bar{gap:8px}
+  /* justify-content:flex-end прижимает вправо перенесённую вторую строку (кнопки), чтобы
+     она была на одной вертикали с языком/темой первой строки. На первой строке распорка
+     съедает свободное место, поэтому логотип остаётся слева. */
+  .bar{gap:8px;justify-content:flex-end}
   .btn{padding:7px 11px;font-size:13.5px}
   .langsw button{padding:7px 9px;font-size:12.5px}
   /* «Демо-данные» и так есть в зоне загрузки — в шапке это лишний ряд кнопок */
