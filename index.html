@@ -191,7 +191,10 @@ header{
   border-bottom:1px solid var(--line);
   position:sticky;top:0;z-index:20;
 }
-.bar{display:flex;align-items:center;gap:14px;padding:12px 0;flex-wrap:wrap}
+/* Только вертикальные отступы: горизонтальные приходят от .wrap, а этот элемент несёт
+   оба класса сразу (<div class="wrap bar">). Сокращённый padding обнулял бы бока —
+   логотип упирался в край экрана. */
+.bar{display:flex;align-items:center;gap:14px;padding-block:12px;flex-wrap:wrap}
 .brand{display:flex;align-items:baseline;gap:10px}
 .brand .name{font-family:'Manrope';font-weight:800;font-size:20px}
 .brand .model{
@@ -260,7 +263,9 @@ header{
 .lcd .unit{font-family:'IBM Plex Mono';font-weight:600;font-size:14px;margin-left:8px}
 .lcd .bottom{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-family:'IBM Plex Mono';font-size:12px}
 .lcd .label{opacity:.75}
-.led{width:9px;height:9px;border-radius:50%;background:var(--led-off);display:inline-block;vertical-align:middle}
+/* flex:none обязателен: внутри .alert (display:flex) светодиод сжимался до 2px и из
+   круглого превращался в чёрточку. Фирменный элемент — так быть не должно. */
+.led{width:9px;height:9px;border-radius:50%;background:var(--led-off);display:inline-block;vertical-align:middle;flex:none}
 .led.on{background:var(--warn);box-shadow:0 0 6px rgba(210,55,46,.7)}
 .lcd-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px}
 .lcd-strip .lcd{padding:14px 18px}
@@ -360,6 +365,7 @@ td.down{color:var(--ok);font-weight:600}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start}
 .tarif-grid{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;align-items:center;font-size:14.5px}
 .tarif-grid .range{font-family:'IBM Plex Mono';color:var(--ink-soft)}
+.unit-note{font-size:13px;color:var(--ink-soft);white-space:nowrap}
 .tarif-grid input{
   font-family:'IBM Plex Mono';font-size:15px;padding:7px 10px;width:120px;
   border:1px solid var(--line);border-radius:6px;background:var(--input-bg);
@@ -399,7 +405,57 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
   .hero{grid-template-columns:1fr;gap:28px;padding-top:36px}
   .lcd-strip{grid-template-columns:1fr}
   .two-col{grid-template-columns:1fr}
+  /* У элементов grid по умолчанию min-width:auto — карточка распирала колонку своим
+     min-content и вылезала за экран. */
+  .two-col>*,.charts>*{min-width:0}
   .mapper .map-fields{grid-template-columns:1fr}
+}
+
+/* ── телефоны ─────────────────────── */
+@media (max-width:560px){
+  .wrap{padding:0 14px}
+
+  /* Липкая шапка на 320px занимала 217px — 38% экрана, и постоянно. На телефоне пусть
+     уезжает при прокрутке: содержимое важнее навигации. */
+  header{position:static}
+  .bar{gap:8px}
+  .btn{padding:7px 11px;font-size:13.5px}
+  .langsw button{padding:7px 9px;font-size:12.5px}
+  /* «Демо-данные» и так есть в зоне загрузки — в шапке это лишний ряд кнопок */
+  #btnDemo{display:none}
+
+  .card{padding:16px}
+  section{margin:28px 0}
+  .sec-head h2{font-size:19px}
+  .hero h1{font-size:27px}
+
+  /* Переключатели из двух длинных кнопок в ряд не помещаются — ставим в столбик
+     и разворачиваем скругления с рамками по вертикали. */
+  .cmp-modes{flex-direction:column}
+  .cmp-modes button{border-left-width:1px;border-top-width:0}
+  .cmp-modes button:first-child{border-top-width:1px;border-radius:8px 8px 0 0}
+  .cmp-modes button:last-child{border-radius:0 0 8px 8px}
+  .cmp-modes button[aria-pressed="true"]+button{border-left-color:var(--line);border-top-color:var(--accent)}
+
+  /* Ручной ввод: текстовые поля имеют собственную ширину (~20 символов) и распирали
+     таблицу до 453px при экране 320 — вводить, прокручивая вбок, невозможно.
+     table-layout:fixed заставляет колонки делить доступную ширину. */
+  #manualTable{table-layout:fixed;width:100%}
+  #manualTable th,#manualTable td{padding:8px 5px}
+  #manualTable input{font-size:14px;padding:7px 6px;min-width:0}
+  #manualTable input[type="month"]{min-width:0}
+  #manualTable td:last-child,#manualTable th:last-child{width:38px}
+  /* Полю месяца нужно больше: у него внутри ещё и родная иконка календаря, иначе
+     «April 2026» обрезается до «April 2». Показанию хватает и остатка. */
+  #manualTable td:first-child,#manualTable th:first-child{width:56%}
+
+  /* min-width поля ссылки не трогаем: он специально больше, чем остаётся рядом с
+     кнопкой, — так кнопка переносится вниз, а поле занимает всю строку. */
+  .tarif-grid input{width:100%;max-width:110px}
+  /* «сум/кВт·ч» у каждой строки дублирует подзаголовок карточки и ломает сетку */
+  .tarif-grid .unit-note{display:none}
+  .tarif-grid{gap:8px 10px}
+  .tarif-grid .range{font-size:13px}
 }
 /* ── печать / PDF ───────────────────────
    Отчёт печатается на белой бумаге, поэтому тёмную тему принудительно гасим:
@@ -2234,7 +2290,7 @@ function renderTariff(){
     const range = b.upto==null ? fmt0(lower)+'+ '+u : fmt0(lower)+'–'+fmt0(b.upto)+' '+u;
     g.insertAdjacentHTML('beforeend',
       '<span class="range">'+range+'</span>'+
-      '<span><input aria-label="'+t('tariff.price.aria',{n:i+1})+'" data-i="'+i+'" value="'+b.price+'" inputmode="numeric"> <span style="font-size:13px;color:var(--ink-soft)">'+t('tariff.unit')+'</span></span>');
+      '<span><input aria-label="'+t('tariff.price.aria',{n:i+1})+'" data-i="'+i+'" value="'+b.price+'" inputmode="numeric"> <span class="unit-note">'+t('tariff.unit')+'</span></span>');
     lower = b.upto ?? lower;
   });
   g.querySelectorAll('input').forEach(inp=>{
