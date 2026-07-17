@@ -3,6 +3,35 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- Content-Security-Policy: подпирает обещание «данные не покидают браузер».
+     Главное здесь — connect-src 'none': страница физически не может никуда ничего
+     отправить. Ни fetch, ни XHR, ни WebSocket, ни sendBeacon. Даже если бы в код
+     проник чужой скрипт, выгрузку он не вынесет — браузер не даст.
+     img-src без внешних адресов закрывает обходной путь «утечка через URL картинки»,
+     form-action 'none' — через отправку формы.
+
+     'unsafe-inline' в script-src — вынужденно: всё приложение это один инлайновый
+     скрипт, а хеш пришлось бы пересчитывать после каждой правки, что убило бы
+     деплой перетаскиванием без сборки. Поэтому вход закрываем экранированием (esc),
+     а выход — connect-src.
+
+     Дублируется в _headers для Cloudflare Pages: там же то, чего мета не умеет
+     (frame-ancestors). При правке — менять оба места. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'none';
+  script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net;
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net;
+  font-src https://fonts.gstatic.com https://cdn.jsdelivr.net;
+  img-src 'self' data:;
+  connect-src 'none';
+  worker-src 'self';
+  manifest-src 'self';
+  base-uri 'none';
+  form-action 'none';
+  frame-ancestors 'none';
+  object-src 'none';
+">
 <title>Свет·Учёт — анализ показаний электросчётчика</title>
 <meta name="description" content="Загрузите выгрузку умного электросчётчика (EX518, EX18 и совместимые — одно- и трёхфазные) и получите расчёт оплаты по блочному тарифу, графики и прогноз. Всё считается в вашем браузере.">
 
@@ -51,11 +80,25 @@
 <meta name="twitter:image" content="https://svet.nurkamol.com/og-image.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Google Fonts — единственное место без integrity, и намеренно: их CSS отдаётся разным
+     в зависимости от браузера (проверено: у Chrome и старых UA разные хеши), поэтому
+     фиксированный хеш просто сломал бы шрифты. Ограничены через CSP. -->
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/dseg@0.46.0/css/dseg.css" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- SRI: браузер сверит хеш и откажется выполнять подменённый файл. Защита от
+     компрометации CDN — иначе чужой скрипт получил бы доступ к выгрузке пользователя.
+     crossorigin обязателен, без него проверка не работает.
+     Хеши привязаны к версии в URL: меняете версию — пересчитайте (см. README). -->
+<link href="https://cdn.jsdelivr.net/npm/dseg@0.46.0/css/dseg.css" rel="stylesheet"
+      integrity="sha384-hQhDV95Csi4psdLa/hWm+HM8l1ycIQlSJs4aea4dvJg+z6nCsAV0qItQNID/WdYB"
+      crossorigin="anonymous">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"
+        integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw"
+        crossorigin="anonymous"></script>
 <!-- Chart.js берём с jsdelivr: на cdnjs версии 4.4.4 нет (есть 4.4.1, затем 4.5.0) — ссылка отдавала 404. -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"
+        integrity="sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt"
+        crossorigin="anonymous"></script>
 <style>
 :root{
   --housing:#EFF2F0;        /* корпус счётчика */
@@ -1544,6 +1587,13 @@ const tariffPeriodsUsed = months => {
 };
 
 /* ---------- утилиты формата ---------- */
+/* Содержимое файла пользователя попадает в разметку (превью колонок, статусы счётчика).
+   Без экранирования ячейка вида <img src=x onerror="..."> станет живым элементом и
+   выполнит чужой код в нашем origin: достаточно прислать человеку .csv. Проверено —
+   выполняется. Всё, что пришло из файла, обязано пройти через esc(). */
+const ESC_MAP = {'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'};
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ESC_MAP[c]);
+
 const fmt0 = n => new Intl.NumberFormat('ru-RU').format(Math.round(n));
 const fmt1 = n => new Intl.NumberFormat('ru-RU',{minimumFractionDigits:1,maximumFractionDigits:1}).format(n);
 const fmt2 = n => new Intl.NumberFormat('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
@@ -1645,7 +1695,7 @@ function buildMapper(dateCol, aCol, stCol){
   const head = mapGrid[0] || [];
   const label = c => {
     const h = String(head[c] ?? '').trim();
-    return t('mapper.col', {n: c+1}) + (h ? ' · ' + (h.length > 28 ? h.slice(0,28)+'…' : h) : '');
+    return t('mapper.col', {n: c+1}) + (h ? ' · ' + esc(h.length > 28 ? h.slice(0,28)+'…' : h) : '');
   };
   const fill = (id, sel, withNone) => {
     const s = document.getElementById(id);
@@ -1663,7 +1713,7 @@ function buildMapper(dateCol, aCol, stCol){
   html += '</tr></thead><tbody>';
   for (const r of mapGrid.slice(0, PREVIEW_ROWS)){
     html += '<tr>';
-    for (let c=0;c<n;c++) html += '<td>'+String((r||[])[c] ?? '')+'</td>';
+    for (let c=0;c<n;c++) html += '<td>'+esc((r||[])[c])+'</td>';
     html += '</tr>';
   }
   tb.innerHTML = html + '</tbody>';
@@ -2047,7 +2097,7 @@ function renderAlerts(){
   // статусы счётчика
   for (const s of A.statuses){
     const range = fmtD(s.from) + (s.to ? ' — '+fmtD(s.to) : t('alert.range.now'));
-    const text = translateStatus(s.raw, lang);
+    const text = esc(translateStatus(s.raw, lang));   // статус пришёл из файла
     add(t(s.to ? 'alert.status.closed' : 'alert.status.open', {s:text, r:range}), !!s.to);
   }
   // прогноз и граница блока

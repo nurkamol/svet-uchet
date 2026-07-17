@@ -1,6 +1,10 @@
 {
   "name": "svet-uchet-tests",
   "private": true,
-  "scripts": { "test": "node core.test.js" },
+  "scripts": {
+    "test": "node core.test.js && node security.test.js",
+    "test:core": "node core.test.js",
+    "test:security": "node security.test.js"
+  },
   "dependencies": { "xlsx": "^0.18.5" }
 }
