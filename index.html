@@ -1,0 +1,2141 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Свет·Учёт — анализ показаний электросчётчика</title>
+<meta name="description" content="Загрузите выгрузку умного электросчётчика (EX518, EX18 и совместимые — одно- и трёхфазные) и получите расчёт оплаты по блочному тарифу, графики и прогноз. Всё считается в вашем браузере.">
+
+<!-- Домен живёт здесь и в SITE_URL в скрипте — меняется в двух местах, больше нигде.
+     Абсолютные URL обязательны: Open Graph не принимает относительные. -->
+<link rel="canonical" href="https://svet.nurkamol.com/">
+<link rel="alternate" hreflang="ru" href="https://svet.nurkamol.com/">
+<link rel="alternate" hreflang="uz-Latn" href="https://svet.nurkamol.com/?lang=uz">
+<link rel="alternate" hreflang="uz-Cyrl" href="https://svet.nurkamol.com/?lang=uzc">
+<link rel="alternate" hreflang="x-default" href="https://svet.nurkamol.com/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Свет·Учёт">
+<meta name="theme-color" content="#1E5F74">
+<meta name="robots" content="index, follow, max-image-preview:large">
+
+<script>
+/* Тему ставим до первой отрисовки, иначе тёмный экран моргнёт светлым.
+   Пусто в хранилище = «как в системе»: следим за системной темой дальше. */
+(function(){
+  try{
+    var saved = localStorage.getItem('svetuchet_theme_v1');
+    var dark = saved ? saved === 'dark'
+                     : matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  }catch(e){ document.documentElement.dataset.theme = 'light'; }
+})();
+</script>
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Свет·Учёт">
+<meta property="og:title" content="Свет·Учёт — анализ показаний электросчётчика">
+<meta property="og:description" content="Выгрузка со счётчика → расход по месяцам, оплата по блочному тарифу, графики и прогноз. Всё считается в браузере, файл никуда не уходит.">
+<meta property="og:url" content="https://svet.nurkamol.com/">
+<meta property="og:image" content="https://svet.nurkamol.com/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Свет·Учёт: ЖК-панель счётчика с показанием и расчётом оплаты">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:locale:alternate" content="uz_UZ">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Свет·Учёт — анализ показаний электросчётчика">
+<meta name="twitter:description" content="Выгрузка со счётчика → расход по месяцам, оплата по блочному тарифу, графики и прогноз. Всё считается в браузере.">
+<meta name="twitter:image" content="https://svet.nurkamol.com/og-image.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/dseg@0.46.0/css/dseg.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- Chart.js берём с jsdelivr: на cdnjs версии 4.4.4 нет (есть 4.4.1, затем 4.5.0) — ссылка отдавала 404. -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --housing:#EFF2F0;        /* корпус счётчика */
+  --panel:#FFFFFF;
+  --ink:#17252B;
+  --ink-soft:#4A5A60;
+  --line:#D8DEDB;
+  --line-strong:#BFC8C4;
+  --hover:#F6F8F7;
+  --input-bg:#FFFBE9;
+  --total-bg:#F7F9F8;
+  --forecast-bg:#FAFBFA;
+  --badge-bg:#EDF3F1;
+  --drop-line:#B8C4BF;
+  --drop-bg:#F0F6F4;
+  --grid:#E4E9E7;           /* сетка графиков */
+  --lcd:#D9E4CF;            /* ЖК-экран: с подсветкой, поэтому в тёмной теме не темнеет */
+  --lcd-deep:#C9D6BE;
+  --lcd-ink:#242F21;
+  --lcd-ghost:rgba(36,47,33,.10);
+  --lcd-edge:#B7C4AC;
+  --led-off:#9AA894;
+  --accent:#1E5F74;         /* приборный сине-зелёный */
+  --accent-deep:#154453;
+  --on-accent:#FFFFFF;      /* текст на акцентной заливке */
+  --warn:#D2372E;           /* светодиод Ogohlantirish */
+  --warn-bg:#FBEDEB;
+  --warn-line:#EAC5C1;
+  --money:#8A5B22;
+  --ok:#2E7D4F;
+  --ok-bg:#EDF6F0;
+  --ok-line:#C7E0CF;
+  --radius:10px;
+  --shadow:0 1px 2px rgba(23,37,43,.06), 0 8px 24px rgba(23,37,43,.07);
+}
+/* Тёмная тема. Значение data-theme проставляет скрипт в <head> ещё до отрисовки —
+   поэтому набор нужен ровно один, без дублирования под prefers-color-scheme.
+   ЖК-панель остаётся светлой: у счётчиков экран с подсветкой, в темноте он светится. */
+:root[data-theme="dark"]{
+  --housing:#111A1E;
+  --panel:#18242A;
+  --ink:#E7EEF0;
+  --ink-soft:#A3B4BA;
+  --line:#2B3A41;
+  --line-strong:#3C4E56;
+  --hover:#1F2C33;
+  --input-bg:#241F14;
+  --total-bg:#1D2A31;
+  --forecast-bg:#162126;
+  --badge-bg:#1E2C33;
+  --drop-line:#3C4E56;
+  --drop-bg:#17282C;
+  --grid:#26343A;
+  --lcd-edge:#8CA07E;
+  --led-off:#4A5A55;
+  --accent:#3E9CBB;
+  --accent-deep:#59B4D1;
+  --on-accent:#0C1518;      /* на светлом акценте белый нечитаем — берём тёмный */
+  --warn:#F26A5F;
+  --warn-bg:#2A1815;
+  --warn-line:#5A2B26;
+  --money:#D9A441;
+  --ok:#54B884;
+  --ok-bg:#15251D;
+  --ok-line:#2C4A3A;
+  --shadow:0 1px 2px rgba(0,0,0,.40), 0 8px 24px rgba(0,0,0,.35);
+  color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto} *,*::before,*::after{animation:none!important;transition:none!important}}
+body{
+  font-family:'IBM Plex Sans',system-ui,sans-serif;
+  background:var(--housing);
+  color:var(--ink);
+  line-height:1.55;
+  font-size:16px;
+}
+h1,h2,h3{font-family:'Manrope',sans-serif;line-height:1.15;letter-spacing:-.01em}
+.mono{font-family:'IBM Plex Mono',monospace}
+a{color:var(--accent)}
+button{font:inherit;cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:4px}
+
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+
+/* ── шапка ─────────────────────────── */
+header{
+  background:var(--panel);
+  border-bottom:1px solid var(--line);
+  position:sticky;top:0;z-index:20;
+}
+.bar{display:flex;align-items:center;gap:14px;padding:12px 0;flex-wrap:wrap}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand .name{font-family:'Manrope';font-weight:800;font-size:20px}
+.brand .model{
+  font-family:'IBM Plex Mono';font-size:11px;font-weight:600;letter-spacing:.08em;
+  border:1.5px solid var(--ink);padding:2px 7px;border-radius:4px;
+}
+.bar .spacer{flex:1}
+.btn{
+  border:1px solid var(--line);background:var(--panel);color:var(--ink);
+  padding:8px 14px;border-radius:8px;font-weight:600;font-size:14px;
+  transition:background .15s,border-color .15s;
+}
+.btn:hover{background:var(--hover);border-color:var(--line-strong)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn-primary:hover{background:var(--accent-deep);border-color:var(--accent-deep)}
+.btn-ghost{border-color:transparent}
+
+/* переключатель языка: сегменты на тех же токенах, что и .btn */
+.langsw{display:flex}
+.langsw button{
+  border:1px solid var(--line);border-left-width:0;background:var(--panel);color:var(--ink-soft);
+  padding:8px 10px;font-family:'IBM Plex Mono';font-size:13px;font-weight:600;
+  transition:background .15s,color .15s;
+}
+.langsw button:first-child{border-left-width:1px;border-radius:8px 0 0 8px}
+.langsw button:last-child{border-radius:0 8px 8px 0}
+.langsw button:hover{background:var(--hover)}
+.langsw button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.langsw button[aria-pressed="true"]+button{border-left-color:var(--accent)}
+
+/* ── герой ─────────────────────────── */
+.hero{padding:56px 0 40px;display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+.hero h1{font-size:clamp(30px,4.4vw,44px);font-weight:800;margin-bottom:14px}
+.hero h1 .kwh{color:var(--accent)}
+.hero p.lead{font-size:17px;color:var(--ink-soft);max-width:46ch;margin-bottom:24px}
+.drop{
+  border:2px dashed var(--drop-line);border-radius:var(--radius);
+  background:var(--panel);padding:26px;text-align:center;
+  transition:border-color .15s, background .15s;
+}
+.drop.drag{border-color:var(--accent);background:var(--drop-bg)}
+.drop .big{font-weight:700;font-size:17px;margin-bottom:4px}
+.drop .hint{color:var(--ink-soft);font-size:14px;margin-bottom:14px}
+.drop input{display:none}
+.drop .row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.privacy{margin-top:12px;font-size:13px;color:var(--ink-soft);display:flex;gap:8px;align-items:flex-start}
+.privacy svg{flex:none;margin-top:2px}
+
+/* фирменный элемент: ЖК-дисплей */
+.lcd{
+  background:linear-gradient(178deg,var(--lcd),var(--lcd-deep));
+  border-radius:14px;border:1px solid var(--lcd-edge);
+  box-shadow:inset 0 2px 10px rgba(36,47,33,.18), var(--shadow);
+  padding:22px 26px;color:var(--lcd-ink);
+}
+.lcd .top{display:flex;justify-content:space-between;font-family:'IBM Plex Mono';font-size:11px;letter-spacing:.1em;margin-bottom:8px}
+.lcd .phases{display:flex;gap:8px}
+.lcd .digits{
+  /* Имя семейства — ровно как в dseg.css: DSEG7-Classic, через дефис.
+     С пробелом оно молча не находится и ЖК рисуется запасным моноширинным. */
+  font-family:'DSEG7-Classic','IBM Plex Mono',monospace;
+  font-size:clamp(34px,5vw,52px);letter-spacing:.04em;
+  position:relative;white-space:nowrap;
+}
+.lcd .digits .ghost{position:absolute;inset:0;color:var(--lcd-ghost);user-select:none}
+.lcd .unit{font-family:'IBM Plex Mono';font-weight:600;font-size:14px;margin-left:8px}
+.lcd .bottom{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-family:'IBM Plex Mono';font-size:12px}
+.lcd .label{opacity:.75}
+.led{width:9px;height:9px;border-radius:50%;background:var(--led-off);display:inline-block;vertical-align:middle}
+.led.on{background:var(--warn);box-shadow:0 0 6px rgba(210,55,46,.7)}
+.lcd-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px}
+.lcd-strip .lcd{padding:14px 18px}
+.lcd-strip .digits{font-size:clamp(22px,2.6vw,30px)}
+.lcd-strip .caption{font-family:'IBM Plex Mono';font-size:11px;letter-spacing:.09em;text-transform:uppercase;opacity:.75;margin-bottom:4px}
+
+/* ── секции ─────────────────────────── */
+section{margin:40px 0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:24px}
+.sec-head{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.sec-head h2{font-size:22px;font-weight:800}
+.sec-head .sub{color:var(--ink-soft);font-size:14px}
+.sec-head .spacer{flex:1}
+
+/* алерты */
+/* Без цветной полосы слева: состояние читается фоном и светодиодом —
+   светодиод здесь фирменный элемент, а полоса-акцент к делу ничего не добавляет. */
+.alert{
+  display:flex;gap:12px;align-items:flex-start;
+  background:var(--warn-bg);border:1px solid var(--warn-line);
+  border-radius:8px;padding:12px 16px;margin-bottom:10px;font-size:15px;
+}
+.alert.ok{background:var(--ok-bg);border-color:var(--ok-line)}
+.alert .led{margin-top:6px}
+.alert b{font-weight:600}
+
+/* таблица */
+.tbl-scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+th,td{padding:9px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{font-family:'IBM Plex Mono';font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);font-weight:600}
+th:first-child,td:first-child{text-align:left}
+td.num{font-family:'IBM Plex Mono'}
+td.money{font-family:'IBM Plex Mono';font-weight:600;color:var(--money)}
+tr.total td{font-weight:700;border-top:2px solid var(--ink);border-bottom:none;background:var(--total-bg)}
+tr.forecast td{color:var(--ink-soft);font-style:italic;background:var(--forecast-bg)}
+.tag{font-family:'IBM Plex Sans';font-size:12px;color:var(--ink-soft);font-style:italic}
+
+/* ссылка-шэринг */
+.share-box{border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin-bottom:14px;background:var(--total-bg)}
+.share-row{display:flex;gap:10px;flex-wrap:wrap}
+.share-row input{
+  flex:1;min-width:220px;font-family:'IBM Plex Mono';font-size:13px;padding:8px 10px;
+  border:1px solid var(--line);border-radius:8px;background:var(--input-bg);color:var(--ink);
+}
+.share-box .note{margin-top:10px;max-width:80ch}
+
+/* ручной ввод показаний */
+.manual{margin:24px 0}
+.manual-actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+#manualTable td{vertical-align:middle}
+#manualTable td:last-child,#manualTable th:last-child{width:1%;text-align:center}
+#manualTable input{
+  font-family:'IBM Plex Mono';font-size:15px;padding:8px 10px;
+  border:1px solid var(--line);border-radius:8px;background:var(--input-bg);color:var(--ink);width:100%;
+}
+#manualTable input[type="month"]{min-width:150px}
+.row-del{
+  border:1px solid var(--line);background:var(--panel);color:var(--ink-soft);
+  border-radius:6px;padding:5px 9px;font-family:'IBM Plex Mono';line-height:1;
+}
+.row-del:hover{border-color:var(--warn);color:var(--warn)}
+
+/* сравнение двух выгрузок */
+.cmp-modes{display:flex;margin-bottom:14px}
+.cmp-modes button{
+  border:1px solid var(--line);border-left-width:0;background:var(--panel);color:var(--ink-soft);
+  padding:8px 14px;font-size:14px;font-weight:600;transition:background .15s,color .15s;
+}
+.cmp-modes button:first-child{border-left-width:1px;border-radius:8px 0 0 8px}
+.cmp-modes button:last-child{border-radius:0 8px 8px 0}
+.cmp-modes button:hover{background:var(--hover)}
+.cmp-modes button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.cmp-modes button[aria-pressed="true"]+button{border-left-color:var(--accent)}
+.cmp-legend{display:flex;align-items:center;gap:10px;margin:14px 0;flex-wrap:wrap}
+.cmp-arrow{color:var(--ink-soft);font-family:'IBM Plex Mono'}
+td.up{color:var(--warn);font-weight:600}     /* стало больше — платить больше */
+td.down{color:var(--ok);font-weight:600}
+#cmpTable td.num,#cmpTable td.money{font-family:'IBM Plex Mono'}
+
+/* сопоставление колонок */
+.mapper .map-fields{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:18px 0}
+.mapper select{
+  font-family:'IBM Plex Sans';font-size:14.5px;padding:8px 10px;width:100%;
+  border:1px solid var(--line);border-radius:8px;background:var(--input-bg);color:var(--ink);
+}
+/* превью — сырое содержимое файла, читается слева, как в самом файле */
+#mapPreview td,#mapPreview th{text-align:left;max-width:210px;overflow:hidden;text-overflow:ellipsis}
+#mapPreview td{font-family:'IBM Plex Mono';font-size:12.5px}
+#mapPreview .picked{background:var(--drop-bg)}
+
+.charts{display:grid;grid-template-columns:1fr;gap:24px}
+.chart-box{position:relative;height:320px}
+.chart-print{display:none}   /* снимок графика: только для печати */
+
+/* тарифы + калькулятор */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start}
+.tarif-grid{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;align-items:center;font-size:14.5px}
+.tarif-grid .range{font-family:'IBM Plex Mono';color:var(--ink-soft)}
+.tarif-grid input{
+  font-family:'IBM Plex Mono';font-size:15px;padding:7px 10px;width:120px;
+  border:1px solid var(--line);border-radius:6px;background:var(--input-bg);
+}
+input:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
+.field{margin-bottom:14px}
+.field label{display:block;font-weight:600;font-size:14px;margin-bottom:5px}
+.field input{
+  font-family:'IBM Plex Mono';font-size:16px;padding:9px 12px;width:100%;
+  border:1px solid var(--line);border-radius:8px;background:var(--input-bg);
+}
+.calc-out{margin-top:18px;border-top:1px solid var(--line);padding-top:16px}
+.calc-row{display:flex;justify-content:space-between;padding:5px 0;font-size:15px}
+.calc-row.total{font-size:19px;font-weight:800;font-family:'Manrope';border-top:2px solid var(--ink);margin-top:8px;padding-top:12px}
+.calc-row .v{font-family:'IBM Plex Mono'}
+.calc-row.total .v{color:var(--money)}
+.note{font-size:13px;color:var(--ink-soft);margin-top:10px}
+
+/* FAQ */
+details{border:1px solid var(--line);border-radius:8px;background:var(--panel);margin-bottom:10px}
+details summary{padding:14px 18px;font-weight:600;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
+details summary::after{content:'+';font-family:'IBM Plex Mono';font-size:18px;color:var(--ink-soft)}
+details[open] summary::after{content:'−'}
+details .body{padding:0 18px 16px;color:var(--ink-soft);font-size:15px;max-width:75ch}
+
+footer{border-top:1px solid var(--line);margin-top:56px;padding:28px 0 40px;color:var(--ink-soft);font-size:14px}
+footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+
+.hidden{display:none!important}
+.file-badge{
+  display:inline-flex;gap:8px;align-items:center;background:var(--badge-bg);border:1px solid var(--line);
+  border-radius:99px;padding:5px 14px;font-size:13.5px;font-family:'IBM Plex Mono';
+}
+.err{color:var(--warn);font-weight:600;margin-top:10px;font-size:14.5px}
+
+@media (max-width:860px){
+  .hero{grid-template-columns:1fr;gap:28px;padding-top:36px}
+  .lcd-strip{grid-template-columns:1fr}
+  .two-col{grid-template-columns:1fr}
+  .mapper .map-fields{grid-template-columns:1fr}
+}
+/* ── печать / PDF ───────────────────────
+   Отчёт печатается на белой бумаге, поэтому тёмную тему принудительно гасим:
+   иначе уйдёт полкартриджа, а ЖК-панели станут серыми пятнами. */
+@media print{
+  :root, :root[data-theme="dark"]{
+    --housing:#FFFFFF; --panel:#FFFFFF; --ink:#000000; --ink-soft:#3A4A50;
+    --line:#C9D2CE; --line-strong:#9AA8A3; --hover:#FFFFFF;
+    --input-bg:#FFFFFF; --total-bg:#F2F5F4; --forecast-bg:#FAFBFA; --badge-bg:#F2F5F4;
+    --grid:#D8DEDB; --accent:#12414F; --accent-deep:#12414F; --on-accent:#FFFFFF;
+    --warn:#A32219; --warn-bg:#FBEDEB; --warn-line:#D9BCB8;
+    --ok:#1E5E39; --ok-bg:#EDF6F0; --ok-line:#BFD8C8;
+    --money:#5E3D14; --lcd:#F0F3EC; --lcd-deep:#F0F3EC; --lcd-ink:#1A2117;
+    --lcd-ghost:transparent; --lcd-edge:#B9C4B1; --led-off:#8A968A;
+    --shadow:none; color-scheme:light;
+  }
+  @page{ margin:14mm; }
+  html{font-size:11.5px}
+  body{background:#fff}
+
+  /* На бумаге не нужно ни интерактивное, ни рекламное: герой с лозунгом и вводным
+     абзацем — это витрина сайта, а не отчёт. Показание из его ЖК есть ниже, в сводке. */
+  header,#hero,.no-print,footer,#faq,
+  #mapper,#manual,.cmp-modes,#dailyCard,#tools{display:none!important}
+
+  /* шапка отчёта — только в печати: на экране она была бы дублем */
+  #printHead{display:block!important;margin-bottom:14px;border-bottom:2px solid var(--ink);padding-bottom:10px}
+  #printHead .t{font-family:'Manrope';font-weight:800;font-size:18px}
+  #printHead .m{font-family:'IBM Plex Mono';font-size:10.5px;color:var(--ink-soft);margin-top:4px}
+  #printTariff{display:block!important}
+
+  .card{box-shadow:none;border:1px solid var(--line);padding:12px}
+  section{margin:12px 0}
+  .lcd{box-shadow:none;border:1px solid var(--lcd-edge)}
+  .lcd .digits .ghost{display:none}      /* «призрак» 8888 на бумаге — грязь */
+
+  /* На бумагу идёт снимок графика, а не живой canvas: см. snapshotChart(). */
+  .chart-box{height:auto}
+  .chart-box canvas{display:none!important}
+  .chart-print{display:block!important;width:100%;height:auto;max-height:200px;object-fit:contain}
+
+  /* Ширина листа (~816px) попадает под мобильный брейкпоинт, и панели встают
+     столбиком на треть страницы. На бумаге они должны остаться в ряд. */
+  .lcd-strip{grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+  .lcd-strip .lcd{padding:9px 11px}
+  .lcd-strip .digits{font-size:20px}
+  .lcd-strip .caption{font-size:8px;margin-bottom:2px}
+
+  /* Восемь колонок в экранном кегле не влезают в A4 и обрезаются справа. */
+  table{font-size:9.5px}
+  th,td{padding:5px 6px;white-space:nowrap}
+  th{font-size:8px;letter-spacing:.04em}
+  .tag{font-size:8px}
+  .alert{padding:8px 11px;font-size:11px;margin-bottom:6px}
+  .sec-head h2{font-size:15px}
+  .sec-head .sub{font-size:10px}
+
+  /* ничего не должно рваться пополам между страницами */
+  section,.card,table,.alert,.lcd{break-inside:avoid; page-break-inside:avoid}
+  thead{display:table-header-group}      /* шапка таблицы повторяется на каждой странице */
+  tr{break-inside:avoid; page-break-inside:avoid}
+  h2{break-after:avoid; page-break-after:avoid}
+  .tbl-scroll{overflow:visible}          /* иначе таблица обрежется по ширине экрана */
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <div class="brand">
+      <span class="name">Свет·Учёт</span>
+      <span class="model">EX518</span>
+    </div>
+    <span class="spacer"></span>
+    <div class="langsw no-print" id="langsw" role="group" data-i18n-aria="lang.aria">
+      <button type="button" data-lang="ru">RU</button>
+      <button type="button" data-lang="uz">O’z</button>
+      <button type="button" data-lang="uzc">Ўз</button>
+    </div>
+    <button class="btn btn-ghost no-print" id="btnTheme" data-i18n-aria="theme.aria" aria-label="Тема оформления" aria-pressed="false">
+      <span id="themeIcon" aria-hidden="true">☾</span>
+    </button>
+    <button class="btn btn-ghost" id="btnDemo" data-i18n="nav.demo">Демо-данные</button>
+    <button class="btn no-print hidden" id="btnPrint" data-i18n="nav.print">Печать / PDF</button>
+    <button class="btn btn-primary" id="btnUploadTop" data-i18n="nav.upload">Загрузить файл</button>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ГЕРОЙ -->
+  <div class="hero" id="hero">
+    <div>
+      <h1 data-i18n-html="hero.h1">Показания счётчика —<br>в понятные <span class="kwh">кВт·ч и сумы</span></h1>
+      <p class="lead" data-i18n="hero.lead">Загрузите выгрузку умного трёхфазного счётчика (EX518 и совместимые) — получите расход по месяцам, оплату по блочному тарифу, графики, прогноз и предупреждения.</p>
+
+      <div class="drop" id="drop">
+        <div class="big" data-i18n="drop.big">Перетащите файл выгрузки сюда</div>
+        <div class="hint" data-i18n="drop.hint">.xlsx или .csv с накопительными суточными показаниями</div>
+        <div class="row">
+          <button class="btn btn-primary" id="btnPick" data-i18n="drop.pick">Выбрать файл</button>
+          <button class="btn" id="btnDemo2" data-i18n="drop.demo">Посмотреть на демо-данных</button>
+        </div>
+        <button class="btn btn-ghost" id="btnManual" style="margin-top:8px;font-size:13.5px;color:var(--accent)" data-i18n="manual.open">Нет выгрузки? Ввести показания вручную</button>
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" data-i18n-aria="drop.aria" aria-label="Файл выгрузки счётчика">
+        <div class="err hidden" id="parseErr"></div>
+      </div>
+
+      <div class="privacy">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+        <span data-i18n="privacy">Файл никуда не отправляется: все расчёты выполняются в вашем браузере. Закрыли вкладку — данных нет.</span>
+      </div>
+    </div>
+
+    <!-- фирменный элемент: ЖК-дисплей -->
+    <div class="lcd" aria-hidden="true">
+      <div class="top">
+        <span>+A · IMPORT</span>
+        <span class="phases"><span>L1</span><span>L2</span><span>L3</span></span>
+      </div>
+      <div class="digits">
+        <span class="ghost">888888.88</span><span id="lcdHero">--&nbsp;--&nbsp;--</span><span class="unit">kW·h</span>
+      </div>
+      <div class="bottom">
+        <span class="label" id="lcdHeroLabel" data-i18n="lcd.wait">ОЖИДАНИЕ ФАЙЛА</span>
+        <span><span class="led" id="lcdLed"></span>&nbsp;T1–T4</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- РУЧНОЙ ВВОД: для тех, у кого выгрузки нет -->
+  <section class="card manual hidden" id="manual">
+    <div class="sec-head">
+      <h2 data-i18n="manual.title">Показания по месяцам</h2>
+      <span class="sub" data-i18n="manual.hint">показание на 1-е число — это итог прошлого месяца</span>
+      <span class="spacer"></span>
+      <button class="btn no-print" id="btnManualClose" data-i18n="manual.close">Закрыть</button>
+    </div>
+    <div class="tbl-scroll">
+      <table id="manualTable">
+        <thead><tr>
+          <th data-i18n="manual.th.month">Месяц</th>
+          <th data-i18n="manual.th.reading">Показание на 1-е число, кВт·ч</th>
+          <th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="manual-actions">
+      <button class="btn" id="btnManualAdd" data-i18n="manual.add">+ Ещё месяц</button>
+      <button class="btn btn-primary" id="btnManualGo" data-i18n="manual.go">Посчитать</button>
+    </div>
+    <p class="note" data-i18n="manual.note">Нужно минимум два показания подряд: расход месяца — это разница между показаниями на 1-е число соседних месяцев.</p>
+    <div class="err hidden" id="manualErr"></div>
+  </section>
+
+  <!-- СОПОСТАВЛЕНИЕ КОЛОНОК: когда заголовки не опознаны, спрашиваем, а не гадаем -->
+  <section class="card mapper hidden" id="mapper">
+    <div class="sec-head">
+      <h2 data-i18n="mapper.title">Не удалось распознать колонки</h2>
+      <span class="sub" data-i18n="mapper.hint">укажите, где дата и где показание — расчёт пойдёт по вашему выбору</span>
+    </div>
+    <div class="tbl-scroll"><table id="mapPreview"></table></div>
+    <div class="map-fields">
+      <div class="field"><label for="mapDate" data-i18n="mapper.date">Колонка с датой</label><select id="mapDate"></select></div>
+      <div class="field"><label for="mapA" data-i18n="mapper.a">Колонка с показанием (+A), кВт·ч</label><select id="mapA"></select></div>
+      <div class="field"><label for="mapSt" data-i18n="mapper.status">Колонка со статусом (необязательно)</label><select id="mapSt"></select></div>
+    </div>
+    <button class="btn btn-primary" id="mapGo" data-i18n="mapper.go">Показать расчёт</button>
+    <div class="err hidden" id="mapErr"></div>
+  </section>
+
+  <!-- РЕЗУЛЬТАТЫ -->
+  <div id="results" class="hidden">
+
+    <!-- Шапка отчёта: видна только при печати, на экране её роль играет обычная шапка -->
+    <div id="printHead" class="hidden">
+      <div class="t">Свет·Учёт — <span id="printTitle">отчёт по расходу электроэнергии</span></div>
+      <div class="m" id="printMeta"></div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span class="file-badge" id="fileBadge"></span>
+      <span class="file-badge" id="periodBadge"></span>
+    </div>
+
+    <div class="lcd-strip">
+      <div class="lcd" id="lastCard"><div class="caption" data-i18n="sum.last">Последнее показание</div><div class="digits"><span id="sumLast"></span><span class="unit">kW·h</span></div></div>
+      <div class="lcd"><div class="caption" data-i18n="sum.kwh">Потреблено за период</div><div class="digits"><span id="sumKwh"></span><span class="unit">kW·h</span></div></div>
+      <div class="lcd"><div class="caption" data-i18n="sum.cost">Итого по тарифу</div><div class="digits"><span id="sumCost"></span><span class="unit" data-i18n="unit.sum">сум</span></div></div>
+    </div>
+
+    <section id="alertsSec">
+      <div class="sec-head"><h2 data-i18n="sec.alerts">Предупреждения</h2></div>
+      <div id="alerts"></div>
+    </section>
+
+    <section>
+      <div class="card">
+        <div class="sec-head">
+          <h2 data-i18n="sec.months">По месяцам</h2>
+          <span class="sub" data-i18n="sec.months.sub">блочный тариф считается заново каждый календарный месяц</span>
+          <span class="spacer"></span>
+          <button class="btn no-print" id="btnShare" data-i18n="share.btn">Поделиться ссылкой</button>
+          <button class="btn no-print" id="btnCsv" data-i18n="btn.csv">Скачать CSV</button>
+        </div>
+        <!-- Ссылка-шэринг: человек должен видеть, что именно уедет получателю -->
+        <div id="shareBox" class="share-box hidden no-print">
+          <div class="share-row">
+            <input id="shareUrl" readonly aria-label="Ссылка на результат">
+            <button class="btn btn-primary" id="btnShareCopy" data-i18n="share.copy">Копировать</button>
+          </div>
+          <p class="note" data-i18n="share.what">В ссылке — только расход по месяцам и ваши тарифы. Ни суточного расхода, ни показаний счётчика, ни имени файла в неё не попадает. Данные лежат в самой ссылке и на сервер не уходят — но кому её отправите, тот увидит эти цифры.</p>
+        </div>
+
+        <div class="tbl-scroll">
+          <table id="monthTable">
+            <thead><tr>
+              <th data-i18n="th.month">Месяц</th><th data-i18n="th.kwh">Потреблено, кВт·ч</th><th data-i18n="th.b1">Блок 1</th><th data-i18n="th.b2">Блок 2</th><th data-i18n="th.b3">Блок 3</th><th data-i18n="th.b4">Блок 4+</th><th data-i18n="th.cost">К оплате, сум</th><th data-i18n="th.avg">Сут. средн.</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="charts">
+      <div class="card">
+        <div class="sec-head"><h2 data-i18n="sec.chart.month">Расход и оплата по месяцам</h2></div>
+        <div class="chart-box"><canvas id="chMonth"></canvas><img id="chMonthImg" class="chart-print" alt=""></div>
+      </div>
+      <div class="card" id="dailyCard">
+        <div class="sec-head"><h2 data-i18n="sec.chart.daily">Расход по дням</h2><span class="sub" data-i18n="sec.chart.daily.sub">красные точки — аномально высокие дни</span></div>
+        <div class="chart-box"><canvas id="chDaily"></canvas><img id="chDailyImg" class="chart-print" alt=""></div>
+      </div>
+    </section>
+
+    <!-- Тарифы в отчёте: на бумаге должно быть видно, по каким ценам посчитано.
+         На экране не показываем — там есть редактируемая карточка тарифов. -->
+    <section id="printTariff" class="hidden">
+      <div class="card">
+        <div class="sec-head"><h2 data-i18n="print.tariff">Тарифы, по которым выполнен расчёт</h2></div>
+        <div class="tbl-scroll">
+          <table id="printTariffTable">
+            <thead><tr>
+              <th data-i18n="print.block">Блок</th>
+              <th data-i18n="print.range">кВт·ч в месяц</th>
+              <th data-i18n="print.price">Цена, сум/кВт·ч</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- СРАВНЕНИЕ ДВУХ ВЫГРУЗОК -->
+    <section id="cmpSection" class="no-print">
+      <div class="card">
+        <div class="sec-head">
+          <h2 data-i18n="cmp.title">Сравнение</h2>
+          <span class="sub" id="cmpSub" data-i18n="cmp.hint">загрузите вторую выгрузку — увидите, что изменилось</span>
+          <span class="spacer"></span>
+          <button class="btn no-print" id="btnCmpPick" data-i18n="cmp.pick">Загрузить вторую выгрузку</button>
+          <button class="btn no-print hidden" id="btnCmpClear" data-i18n="cmp.clear">Убрать</button>
+        </div>
+        <input type="file" id="cmpInput" class="hidden" accept=".xlsx,.xls,.csv" data-i18n-aria="cmp.aria" aria-label="Вторая выгрузка для сравнения">
+        <div class="err hidden" id="cmpErr"></div>
+
+        <div id="cmpBody" class="hidden">
+          <div class="cmp-modes no-print" role="group" data-i18n-aria="cmp.mode.aria">
+            <button type="button" data-mode="year" data-i18n="cmp.mode.year">Год к году</button>
+            <button type="button" data-mode="order" data-i18n="cmp.mode.order">По порядку (до/после)</button>
+          </div>
+          <p class="note" id="cmpModeNote"></p>
+          <div class="cmp-legend">
+            <span class="file-badge" id="cmpBadgeA"></span>
+            <span class="cmp-arrow">→</span>
+            <span class="file-badge" id="cmpBadgeB"></span>
+          </div>
+          <div class="tbl-scroll">
+            <table id="cmpTable">
+              <thead><tr>
+                <th data-i18n="th.month">Месяц</th>
+                <th data-i18n="cmp.th.was">Было, кВт·ч</th>
+                <th data-i18n="cmp.th.now">Стало, кВт·ч</th>
+                <th data-i18n="cmp.th.dkwh">Δ кВт·ч</th>
+                <th data-i18n="cmp.th.pct">Δ %</th>
+                <th data-i18n="cmp.th.dcost">Δ сум</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="chart-box" style="margin-top:20px"><canvas id="chCmp"></canvas><img id="chCmpImg" class="chart-print" alt=""></div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ТАРИФЫ + КАЛЬКУЛЯТОР (доступны и без файла) -->
+  <section class="two-col" id="tools">
+    <div class="card">
+      <div class="sec-head">
+        <h2 data-i18n="sec.tariff">Тарифы</h2>
+        <span class="sub" data-i18n="sec.tariff.sub">сум за кВт·ч, в месяц</span>
+        <span class="spacer"></span>
+        <button class="btn no-print" id="btnTarifReset" data-i18n="btn.reset">Сбросить</button>
+      </div>
+      <div class="tarif-grid" id="tarifGrid"></div>
+      <p class="note" data-i18n="tariff.note">Цены можно править — таблица, графики и калькулятор пересчитаются сразу. Значения сохраняются в этом браузере.</p>
+    </div>
+
+    <div class="card">
+      <div class="sec-head"><h2 data-i18n="sec.calc">Калькулятор оплаты</h2></div>
+      <div class="field"><label for="cPrev" data-i18n="calc.prev">Показание на начало месяца, кВт·ч</label><input id="cPrev" inputmode="decimal" data-i18n-ph="calc.prev.ph" placeholder="напр. 2051,13"></div>
+      <div class="field"><label for="cCurr" data-i18n="calc.curr">Новое показание, кВт·ч</label><input id="cCurr" inputmode="decimal" data-i18n-ph="calc.curr.ph" placeholder="напр. 2266,62"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="field"><label for="cDays" data-i18n="calc.days">Прошло дней</label><input id="cDays" inputmode="numeric" data-i18n-ph="calc.days.ph" placeholder="напр. 15"></div>
+        <div class="field"><label for="cDaysM" data-i18n="calc.daysm">Дней в месяце</label><input id="cDaysM" inputmode="numeric" value="30"></div>
+      </div>
+      <div class="calc-out" id="calcOut">
+        <div class="calc-row"><span data-i18n="calc.used">Потреблено</span><span class="v" id="oKwh">—</span></div>
+        <div id="oBlocks"></div>
+        <div class="calc-row total"><span data-i18n="calc.now">К оплате сейчас</span><span class="v" id="oCost">—</span></div>
+        <div class="calc-row"><span data-i18n="calc.fckwh">Прогноз на полный месяц</span><span class="v" id="oFcKwh">—</span></div>
+        <div class="calc-row"><span data-i18n="calc.fccost">Прогноз суммы за месяц</span><span class="v" id="oFcCost">—</span></div>
+        <div class="note" id="oWarn"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section id="faq">
+    <div class="sec-head"><h2 data-i18n="faq.title">Как это читать</h2></div>
+    <details><summary data-i18n="faq.q1">Почему показания «накопительные»?</summary><div class="body" data-i18n="faq.a1">Счётчик работает как одометр в машине: цифра только растёт. Расход за любой период — это показание на конец минус показание на начало. Выгрузка содержит снимок всех регистров каждый день в 00:00, поэтому показание на 1-е число месяца — это итог предыдущего месяца.</div></details>
+    <details><summary data-i18n="faq.q2">Что такое блочный тариф?</summary><div class="body" data-i18n="faq.a2">Каждый календарный месяц счёт начинается заново: первые 200 кВт·ч месяца оплачиваются по цене 1-го блока, следующие 300 — по цене 2-го, и так далее. Чем больше потребили за месяц, тем дороже каждый следующий киловатт-час.</div></details>
+    <details><summary data-i18n="faq.q3">Что такое зоны Т1–Т4 и реактивная энергия?</summary><div class="body" data-i18n="faq.a3">Т1–Т4 — деление суток на временные зоны; счётчик ведёт их отдельно, но при блочном тарифе оплата идёт по общей сумме. Реактивная энергия (+R/−R) — «бесполезная» энергия двигателей и электроники; для населения она не тарифицируется и на оплату не влияет.</div></details>
+    <details><summary data-i18n="faq.q4">Что значит «Обратный порядок фаз»?</summary><div class="body" data-i18n="faq.a4">Фазы A-B-C подключены в другом порядке (например A-C-B). На точность учёта современного электронного счётчика это не влияет — он считает верно в любом порядке. Но трёхфазные двигатели вращались бы в обратную сторону, поэтому электрики обычно исправляют подключение.</div></details>
+    <details><summary data-i18n="faq.q5">Какие файлы принимает сервис?</summary><div class="body" data-i18n="faq.a5">Стандартную выгрузку умного счётчика: .xlsx или .csv, где есть колонка с датой (Clock) и колонка накопительной активной энергии — Active energy import (+A). Десятичный разделитель может быть и точкой, и запятой. Если колонки названы иначе, сервис покажет ваш файл и попросит указать их вручную — так подойдёт выгрузка любого счётчика.</div></details>
+    <details><summary data-i18n="faq.q6">Однофазный счётчик подойдёт?</summary><div class="body" data-i18n="faq.a6">Да. Расчёт не зависит от числа фаз: нужны только дата и накопительное показание активной энергии, а блочный тариф для населения у одно- и трёхфазных одинаковый. Разница лишь в том, что у однофазного не бывает статуса «Обратный порядок фаз», а зоны Т1–Т4 при блочном тарифе всё равно не участвуют в оплате.</div></details>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span data-i18n="footer.about">Свет·Учёт — некоммерческий инструмент. Расчёт справочный; итоговую сумму определяет поставщик электроэнергии.</span>
+    <span data-i18n="footer.privacy">Данные не покидают ваш браузер.</span>
+  </div>
+</footer>
+
+<script>
+/* ============ ЯДРО РАСЧЁТОВ ============ */
+const DEFAULT_TARIFF = [
+  {upto:200,   price:650},
+  {upto:500,   price:900},
+  {upto:1000,  price:1100},
+  {upto:5000,  price:1600},
+  {upto:10000, price:1900},
+  {upto:null,  price:2200},
+];
+/* Языки: ru — русский, uz — узбекский (латиница), uzc — узбекский (кириллица).
+   Везде lang необязателен и по умолчанию 'ru'. */
+const MONTHS = {
+  ru:  ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'],
+  uz:  ['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'],
+  uzc: ['Январ','Феврал','Март','Апрел','Май','Июн','Июл','Август','Сентябр','Октябр','Ноябр','Декабр'],
+};
+const monthNames = lang => MONTHS[lang] || MONTHS.ru;
+const monthLabel = (y, m, lang) => monthNames(lang)[m] + ' ' + y;
+
+function parseNum(v){
+  if (v == null) return NaN;
+  if (typeof v === 'number') return v;
+  const s = String(v).trim().replace(/\s/g,'').replace(',', '.');
+  return s === '' ? NaN : Number(s);
+}
+const serialToDate = n => {
+  const d = new Date(Math.round((n - 25569) * 86400000));
+  return isNaN(d) ? null : new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+};
+function parseDate(v){
+  if (v instanceof Date && !isNaN(v)) return v;
+  if (typeof v === 'number') return serialToDate(v);                  // серийная дата Excel
+  const s = String(v).trim();
+  let m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})/);        // dd/mm/yyyy
+  if (m) return new Date(+m[3], +m[2]-1, +m[1]);
+  m = s.match(/^(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})/);            // yyyy-mm-dd
+  if (m) return new Date(+m[1], +m[2]-1, +m[3]);
+  // серийная дата, пришедшая строкой (.csv читаем без типизации — см. XLSX.read)
+  if (/^\d+([.,]\d+)?$/.test(s)) return serialToDate(Number(s.replace(',', '.')));
+  return null;
+}
+const STATUS_RULES = [
+  [/Phase Sequence Reversal/gi, {ru:'Обратный порядок фаз',   uz:'Fazalar tartibi teskari', uzc:'Фазалар тартиби тескари'}],
+  [/Power Fail(ure)?/gi,       {ru:'Пропадание питания',      uz:'Ta’minot uzilishi',       uzc:'Таъминот узилиши'}],
+  [/Reverse (Energy|Run)/gi,   {ru:'Обратный ход',            uz:'Teskari yurish',          uzc:'Тескари юриш'}],
+  [/Cover Open/gi,             {ru:'Вскрытие крышки',         uz:'Qopqoq ochilgan',         uzc:'Қопқоқ очилган'}],
+  [/Magnetic/gi,               {ru:'Магнитное воздействие',   uz:'Magnit ta’siri',          uzc:'Магнит таъсири'}],
+];
+/* Пустой статус приходит текстом "null" (и вариациями) — приводим к пустой строке. */
+function normStatus(s){
+  if (!s) return '';
+  const raw = String(s).trim().toLowerCase();
+  if (raw==='null' || raw==='nan' || raw==='-' || raw==='none') return '';
+  return String(s).trim();
+}
+function translateStatus(s, lang){
+  let out = normStatus(s);
+  if (!out) return '';
+  for (const [re, tr] of STATUS_RULES) out = out.replace(re, tr[lang] || tr.ru);
+  return out.replace(/[\[\]]/g,'').trim();
+}
+
+/* ---- разбор сетки ячеек в строки показаний ----
+   Числу фаз здесь взяться неоткуда: нужны только дата и накопительное +A.
+   Однофазный EX18 и трёхфазный EX518 — один и тот же вендор и одна программа
+   считывания, поэтому колонки те же; отличается лишь набор необязательных
+   колонок, которых мы не читаем. Если заголовки не опознаны — колонки
+   указывает пользователь (см. mapper в интерфейсе). */
+function findCols(grid){
+  for (let i=0;i<Math.min(grid.length,10);i++){
+    const row = (grid[i]||[]).map(c=>String(c||'').toLowerCase());
+    const d = row.findIndex(c=>c.includes('clock')||c.includes('дата')||c.includes('sana')||c==='date');
+    // rate 1..4 — это зоны Т1–Т4, на оплату при блочном тарифе они не идут
+    const a = row.findIndex(c=>c.includes('active energy import (+a)(kwh)') || (c.includes('+a') && c.includes('kwh') && !c.includes('rate')));
+    if (d>-1 && a>-1) return {hi:i, dateCol:d, aCol:a,
+      stCol: row.findIndex(c=>c.includes('status')||c.includes('статус'))};
+  }
+  return null;
+}
+/* Строку берём, только если дата и число разобрались: заголовок и мусор отсеются сами. */
+function rowsFromCols(grid, dateCol, aCol, stCol, from){
+  const rows=[];
+  for (let i=(from||0);i<grid.length;i++){
+    const r = grid[i]||[];
+    const date = parseDate(r[dateCol]);
+    const a = parseNum(r[aCol]);
+    if (date && isFinite(a)) rows.push({date, a, status: stCol>-1 ? r[stCol] : ''});
+  }
+  return rows;
+}
+function extractRows(grid){
+  const f = findCols(grid);
+  // без заголовков пробуем самое частое: 0 = дата, 1 = показание
+  const c = f || {hi:-1, dateCol:0, aCol:1, stCol:-1};
+  const rows = rowsFromCols(grid, c.dateCol, c.aCol, c.stCol, c.hi+1);
+  if (rows.length<2) throw new Error('E_NO_ROWS');
+  return rows;
+}
+
+/* Потолок правдоподобия. EX18 (60 A × 220 В ≈ 13 кВт) физически не пропустит больше
+   ~317 кВт·ч в сутки; берём с большим запасом, чтобы не задеть редкого потребителя с
+   бассейном. Цель — поймать неверно прочитанный файл: баг с запятой давал ~5000. */
+const MAX_PLAUSIBLE_KWH_PER_DAY = 500;
+const implausibleDays = daily => daily.filter(d => d.kwh > MAX_PLAUSIBLE_KWH_PER_DAY);
+
+/* rows: [{date, a, status}] отсортированы по дате.
+   Расход дня X = показание(X+1) − показание(X); относится к месяцу дня X. */
+function analyze(rows){
+  rows = rows.filter(r => r.date && isFinite(r.a)).sort((a,b)=>a.date-b.date);
+  /* Коды ошибок, а не готовый текст: сообщение подбирает интерфейс по своему языку. */
+  if (rows.length < 2) throw new Error('E_TOO_FEW_ROWS');
+  const daily = [];
+  for (let i=0;i<rows.length-1;i++){
+    const d = rows[i+1].a - rows[i].a;
+    daily.push({date:rows[i].date, kwh: d < 0 ? 0 : d, status: rows[i].status||''});
+  }
+  const monthsMap = new Map();
+  for (const d of daily){
+    const key = d.date.getFullYear()*100 + d.date.getMonth();
+    if (!monthsMap.has(key)) monthsMap.set(key, {y:d.date.getFullYear(), m:d.date.getMonth(), kwh:0, days:0, from:d.date, to:d.date});
+    const mo = monthsMap.get(key);
+    mo.kwh += d.kwh; mo.days += 1;
+    if (d.date < mo.from) mo.from = d.date;
+    if (d.date > mo.to)   mo.to   = d.date;
+  }
+  const months = [...monthsMap.values()].sort((a,b)=>(a.y-b.y)||(a.m-b.m));
+  for (const mo of months){
+    mo.daysInMonth = new Date(mo.y, mo.m+1, 0).getDate();
+    mo.partial = mo.days < mo.daysInMonth;
+  }
+  /* Статусы храним в исходном виде и переводим при отрисовке — иначе смена языка
+     потребовала бы перечитывать файл. */
+  const statuses = [];
+  let cur = null;
+  for (const r of rows){
+    const raw = normStatus(r.status);
+    if (raw !== (cur ? cur.raw : '')){
+      if (cur) cur.to = r.date;
+      cur = raw ? {raw, from:r.date, to:null} : null;
+      if (cur) statuses.push(cur);
+    }
+  }
+  return {rows, daily, months, statuses,
+          firstDate: rows[0].date, lastDate: rows[rows.length-1].date,
+          firstA: rows[0].a, lastA: rows[rows.length-1].a};
+}
+
+/* ---- ручной ввод показаний по месяцам ----
+   Для тех, у кого нет выгрузки: человек переписывает показание на 1-е число каждого
+   месяца. Показание на 1-е число = итог прошлого месяца, поэтому расход месяца X =
+   показание(1-е число X+1) − показание(1-е число X).
+
+   Через analyze это пропускать нельзя: он считает строки суточными и решил бы, что
+   в месяце был один день — все месяцы стали бы «неполными», с ложным прогнозом.
+
+   readings: [{y, m, a}] — показание на 1-е число месяца (y, m). */
+function monthsFromReadings(readings){
+  const rs = readings.filter(r => isFinite(r.a) && isFinite(r.y) && isFinite(r.m))
+                     .sort((a,b) => (a.y-b.y) || (a.m-b.m));
+  if (rs.length < 2) throw new Error('E_TOO_FEW_READINGS');
+  const months = [], skipped = [];
+  for (let i=0;i<rs.length-1;i++){
+    const cur = rs[i], next = rs[i+1];
+    const gap = (next.y - cur.y)*12 + (next.m - cur.m);
+    if (gap !== 1){
+      // пропуск в показаниях: дельта покрывает несколько месяцев, а как её разделить
+      // между ними — неизвестно. Выдумывать не будем, месяц выпадает из расчёта.
+      skipped.push({y:cur.y, m:cur.m, gap});
+      continue;
+    }
+    const dim = new Date(cur.y, cur.m+1, 0).getDate();
+    months.push({y:cur.y, m:cur.m, kwh: Math.max(0, next.a - cur.a),
+                 days:dim, daysInMonth:dim, partial:false,
+                 from:new Date(cur.y, cur.m, 1), to:new Date(cur.y, cur.m, dim)});
+  }
+  if (!months.length) throw new Error('E_NO_MONTH_PAIRS');
+  return {months, skipped};
+}
+/* Собираем структуру того же вида, что отдаёт analyze, чтобы отрисовка не различала
+   источник. daily пуст: суточных данных у нас нет и придумывать их нельзя —
+   график по дням и поиск аномалий для ручного ввода просто не показываем. */
+function analyzeManual(readings){
+  const {months, skipped} = monthsFromReadings(readings);
+  const rows = readings.filter(r => isFinite(r.a))
+                       .map(r => ({date:new Date(r.y, r.m, 1), a:r.a, status:''}))
+                       .sort((a,b) => a.date - b.date);
+  return {rows, daily:[], months, statuses:[], skipped, manual:true,
+          firstDate: rows[0].date, lastDate: rows[rows.length-1].date,
+          firstA: rows[0].a, lastA: rows[rows.length-1].a};
+}
+
+/* ---- ссылка-шэринг ----
+   Данные едут во фрагменте URL (после #): фрагмент не отправляется на сервер — ни при
+   загрузке страницы, ни в превью мессенджеров. Но сам URL человек копирует и куда-то
+   вставляет, поэтому кладём МИНИМУМ: месяц, расход, тариф. Ни суточного ряда (по нему
+   видно, когда хозяев не было дома), ни имени файла, ни статусов счётчика.
+
+   Формат: v1~<год_месяц_кВт·ч!...>~<цены_тарифа>
+   Разделители — только те, что encodeURIComponent не трогает (~ _ ! .), иначе ссылка
+   поломается при пересылке. Точка занята дробной частью, поэтому поля разделяет «_»:
+   с точкой «307.2» распалось бы на 307 и 2, и получатель увидел бы другую сумму. */
+function encodeShare(months, tariff){
+  /* Два знака, а не один: расход 269,88 при округлении до 269,9 даёт другую сумму,
+     и итог у получателя разъезжается с итогом отправителя. Ссылка от этого длиннее
+     на пару символов — цена того стоит. */
+  const m = months.map(x => [x.y, x.m, Math.round(x.kwh * 100) / 100].join('_')).join('!');
+  const t = tariff.map(b => b.price).join('_');
+  return 'v1~' + m + '~' + t;
+}
+function decodeShare(s){
+  const parts = String(s || '').split('~');
+  if (parts[0] !== 'v1' || parts.length !== 3) throw new Error('E_SHARE_BAD');
+  const months = parts[1].split('!').filter(Boolean).map(chunk => {
+    const nums = chunk.split('_');
+    if (nums.length !== 3) throw new Error('E_SHARE_BAD');
+    const [y, m, kwh] = nums.map(Number);
+    if (!isFinite(y) || !isFinite(m) || !isFinite(kwh) || m < 0 || m > 11 || kwh < 0)
+      throw new Error('E_SHARE_BAD');
+    const dim = new Date(y, m + 1, 0).getDate();
+    return {y, m, kwh, days:dim, daysInMonth:dim, partial:false,
+            from:new Date(y, m, 1), to:new Date(y, m, dim)};
+  });
+  if (!months.length) throw new Error('E_SHARE_BAD');
+  const prices = parts[2].split('_').map(Number);
+  if (prices.length !== DEFAULT_TARIFF.length || prices.some(p => !isFinite(p) || p < 0))
+    throw new Error('E_SHARE_BAD');
+  const tariff = DEFAULT_TARIFF.map((b, i) => ({upto:b.upto, price:prices[i]}));
+  return {months, tariff};
+}
+
+/* ---- сравнение двух выгрузок ----
+   Два способа сопоставить месяцы, и путать их нельзя:
+   'year'  — январь с январём (сезонность снята, видно изменение образа жизни);
+   'order' — первый месяц с первым (до/после кондиционера, сезонность НЕ снята,
+             поэтому сравнивать так осмысленно лишь равные по длине куски года).
+   Возвращаем только пары, где есть оба месяца: неполные пары врут. */
+function compareMonths(monthsA, monthsB, mode, tariff){
+  const pairs = [];
+  if (mode === 'order'){
+    const n = Math.min(monthsA.length, monthsB.length);
+    for (let i=0;i<n;i++) pairs.push([monthsA[i], monthsB[i]]);
+  } else {
+    const byMonth = new Map();
+    for (const b of monthsB) if (!byMonth.has(b.m)) byMonth.set(b.m, b);
+    for (const a of monthsA){
+      const b = byMonth.get(a.m);
+      if (b) pairs.push([a, b]);
+    }
+  }
+  const rows = pairs.map(([a, b]) => {
+    const costA = blockCost(a.kwh, tariff), costB = blockCost(b.kwh, tariff);
+    return {a, b,
+      dKwh: b.kwh - a.kwh,
+      dCost: costB - costA,
+      costA, costB,
+      // проценты не считаем от нуля: месяц без расхода даёт бесконечность
+      pct: a.kwh > 0 ? (b.kwh - a.kwh) / a.kwh * 100 : null};
+  });
+  const kwhA = rows.reduce((s,r)=>s+r.a.kwh, 0);
+  const kwhB = rows.reduce((s,r)=>s+r.b.kwh, 0);
+  return {rows, mode,
+    kwhA, kwhB, dKwh: kwhB - kwhA,
+    costA: rows.reduce((s,r)=>s+r.costA, 0),
+    costB: rows.reduce((s,r)=>s+r.costB, 0),
+    dCost: rows.reduce((s,r)=>s+r.dCost, 0),
+    pct: kwhA > 0 ? (kwhB - kwhA) / kwhA * 100 : null};
+}
+
+function blockBreakdown(kwh, tariff){
+  const out = []; let lower = 0;
+  for (const b of tariff){
+    const upper = b.upto == null ? Infinity : b.upto;
+    const inBlock = Math.max(0, Math.min(kwh, upper) - lower);
+    out.push({kwh:inBlock, price:b.price, cost:inBlock*b.price});
+    lower = upper;
+  }
+  return out;
+}
+const blockCost = (kwh, tariff) => Math.round(blockBreakdown(kwh, tariff).reduce((s,b)=>s+b.cost,0));
+
+function medianOf(arr){
+  const a = [...arr].sort((x,y)=>x-y);
+  return a.length ? (a.length%2 ? a[(a.length-1)/2] : (a[a.length/2-1]+a[a.length/2])/2) : 0;
+}
+/* ============ /ЯДРО ============ */
+
+/* ---------- строки интерфейса ----------
+   Три языка: ru, uz (латиница), uzc (кириллица). Ключ отсутствует → берём русский.
+   В разметке: data-i18n (текст), data-i18n-html (с разметкой),
+   data-i18n-ph (placeholder), data-i18n-aria (aria-label).
+   Подстановки вида {x} заполняет t(key, params). */
+const LANGS = ['ru','uz','uzc'];
+const HTML_LANG = {ru:'ru', uz:'uz', uzc:'uz-Cyrl'};
+const STR = {
+ru:{
+  'page.title':'Свет·Учёт — анализ показаний электросчётчика',
+  'page.desc':'Загрузите выгрузку умного электросчётчика (EX518, EX18 и совместимые — одно- и трёхфазные) и получите расчёт оплаты по блочному тарифу, графики и прогноз. Всё считается в вашем браузере.',
+  'og.desc':'Выгрузка со счётчика → расход по месяцам, оплата по блочному тарифу, графики и прогноз. Всё считается в браузере, файл никуда не уходит.',
+  'lang.aria':'Язык интерфейса','theme.aria':'Тема оформления: светлая или тёмная',
+  'print.title':'отчёт по расходу электроэнергии','print.made':'сформирован {d}',
+  'print.tariff':'Тарифы, по которым выполнен расчёт','print.block':'Блок','print.range':'кВт·ч в месяц',
+  'print.price':'Цена, сум/кВт·ч','print.blockN':'Блок {n}',
+  'nav.demo':'Демо-данные','nav.print':'Печать / PDF','nav.upload':'Загрузить файл',
+  'hero.h1':'Показания счётчика —<br>в понятные <span class="kwh">кВт·ч и сумы</span>',
+  'hero.lead':'Загрузите выгрузку умного счётчика (EX518, EX18 и совместимые — одно- и трёхфазные) — получите расход по месяцам, оплату по блочному тарифу, графики, прогноз и предупреждения.',
+  'mapper.title':'Не удалось распознать колонки',
+  'mapper.hint':'укажите, где дата и где показание — расчёт пойдёт по вашему выбору',
+  'mapper.date':'Колонка с датой','mapper.a':'Колонка с показанием (+A), кВт·ч',
+  'mapper.status':'Колонка со статусом (необязательно)','mapper.none':'— нет —',
+  'mapper.col':'Колонка {n}','mapper.go':'Показать расчёт',
+  'mapper.err':'В этих колонках не нашлось пары «дата + накопительное показание». Выберите другие — в таблице выше видно, что где лежит.',
+  'alert.implausible':'Расход <b>{k} кВт·ч за сутки</b> ({d}) невозможен для бытового счётчика — похоже, файл прочитан неверно. Проверьте, те ли колонки выбраны и не сбит ли формат чисел. Таких дней: {n}.',
+  'drop.big':'Перетащите файл выгрузки сюда',
+  'drop.hint':'.xlsx или .csv с накопительными суточными показаниями',
+  'drop.pick':'Выбрать файл','drop.demo':'Посмотреть на демо-данных','drop.aria':'Файл выгрузки счётчика',
+  'privacy':'Файл никуда не отправляется: все расчёты выполняются в вашем браузере. Закрыли вкладку — данных нет.',
+  'lcd.wait':'ОЖИДАНИЕ ФАЙЛА','lcd.reading':'ПОКАЗАНИЕ · {d}',
+  'badge.demo':'демо-данные','badge.manual':'введено вручную','badge.shared':'из ссылки',
+  'lcd.period':'РАСХОД ЗА ПЕРИОД',
+  'share.btn':'Поделиться ссылкой','share.copy':'Копировать','share.copied':'Скопировано',
+  'share.what':'В ссылке — только расход по месяцам и ваши тарифы. Ни суточного расхода, ни показаний счётчика, ни имени файла в неё не попадает. Данные лежат в самой ссылке и на сервер не уходят — но кому её отправите, тот увидит эти цифры.',
+  'err.E_SHARE_BAD':'Ссылка повреждена: данные в ней не читаются. Попросите отправителя сделать новую.',
+  'manual.open':'Нет выгрузки? Ввести показания вручную',
+  'manual.title':'Показания по месяцам','manual.hint':'показание на 1-е число — это итог прошлого месяца',
+  'manual.close':'Закрыть','manual.add':'+ Ещё месяц','manual.go':'Посчитать','manual.del':'Убрать строку',
+  'manual.th.month':'Месяц','manual.th.reading':'Показание на 1-е число, кВт·ч',
+  'manual.note':'Нужно минимум два показания подряд: расход месяца — это разница между показаниями на 1-е число соседних месяцев.',
+  'manual.gaps':'Пропущены показания, поэтому эти месяцы в расчёт не вошли: {list}. Разделить расход между месяцами без промежуточного показания невозможно — добавьте недостающие.',
+  'unit.kwh':'кВт·ч','unit.sum':'сум',
+  'sum.last':'Последнее показание','sum.kwh':'Потреблено за период','sum.cost':'Итого по тарифу',
+  'sec.alerts':'Предупреждения','sec.months':'По месяцам',
+  'sec.months.sub':'блочный тариф считается заново каждый календарный месяц',
+  'btn.csv':'Скачать CSV',
+  'th.month':'Месяц','th.kwh':'Потреблено, кВт·ч','th.b1':'Блок 1','th.b2':'Блок 2','th.b3':'Блок 3',
+  'th.b4':'Блок 4+','th.cost':'К оплате, сум','th.avg':'Сут. средн.',
+  'table.forecast':'{m} — прогноз на полный месяц','table.total':'Итого за период',
+  'sec.chart.month':'Расход и оплата по месяцам','sec.chart.daily':'Расход по дням',
+  'sec.chart.daily.sub':'красные точки — аномально высокие дни',
+  'chart.daily':'кВт·ч/сутки','chart.tooltip.cost':'Оплата: {v} сум','chart.tooltip.kwh':'Расход: {v} кВт·ч',
+  'cmp.title':'Сравнение','cmp.hint':'загрузите вторую выгрузку — увидите, что изменилось',
+  'cmp.pick':'Загрузить вторую выгрузку','cmp.clear':'Убрать',
+  'cmp.aria':'Вторая выгрузка для сравнения','cmp.mode.aria':'Способ сравнения',
+  'cmp.mode.year':'Год к году','cmp.mode.order':'По порядку (до/после)',
+  'cmp.mode.note.year':'Январь сравнивается с январём и так далее — сезонность не мешает, видно изменение образа жизни.',
+  'cmp.mode.note.order':'Первый месяц с первым, второй со вторым — для «до и после» покупки. Сезонность здесь не снимается: сравнивайте сопоставимые куски года.',
+  'cmp.sub.year':'одинаковые месяцы разных лет','cmp.sub.order':'месяцы по порядку: до → после',
+  'cmp.nopairs':'Общих месяцев не нашлось — сравнивать нечего. Попробуйте другой способ сравнения или другую выгрузку.',
+  'cmp.th.was':'Было, кВт·ч','cmp.th.now':'Стало, кВт·ч','cmp.th.dkwh':'Δ кВт·ч','cmp.th.pct':'Δ %','cmp.th.dcost':'Δ сум',
+  'cmp.total':'Итого по общим месяцам',
+  'sec.tariff':'Тарифы','sec.tariff.sub':'сум за кВт·ч, в месяц','btn.reset':'Сбросить',
+  'tariff.note':'Цены можно править — таблица, графики и калькулятор пересчитаются сразу. Значения сохраняются в этом браузере.',
+  'tariff.price.aria':'Цена блока {n}','tariff.unit':'сум/кВт·ч',
+  'sec.calc':'Калькулятор оплаты',
+  'calc.prev':'Показание на начало месяца, кВт·ч','calc.prev.ph':'напр. 2051,13',
+  'calc.curr':'Новое показание, кВт·ч','calc.curr.ph':'напр. 2266,62',
+  'calc.days':'Прошло дней','calc.days.ph':'напр. 15','calc.daysm':'Дней в месяце',
+  'calc.used':'Потреблено','calc.now':'К оплате сейчас',
+  'calc.fckwh':'Прогноз на полный месяц','calc.fccost':'Прогноз суммы за месяц',
+  'calc.block':'Блок {n} · {k} × {p}',
+  'calc.err.less':'Новое показание меньше начального — проверьте цифры.',
+  'calc.warn.cross':'При текущем темпе месяц перейдёт границу {b} кВт·ч — дальше тариф {p} сум/кВт·ч.',
+  'alert.status.closed':'<b>{s}</b> ({r}) — на учёт не влияет; статус снят, подключение исправлено.',
+  'alert.status.open':'<b>{s}</b> ({r}). На точность учёта электронного счётчика не влияет, но стоит показать электрику.',
+  'alert.range.now':' — по настоящее время',
+  'alert.month':'Текущий месяц (<b>{m}</b>): {k} кВт·ч за {d} дн. Прогноз на полный месяц — <b>{f} кВт·ч ≈ {c} сум</b>.',
+  'alert.boundary':'Прогноз близок к границе <b>{b} кВт·ч</b> — дальше каждый кВт·ч дороже. Есть смысл перенести часть нагрузки (стирка, бойлер) на начало следующего месяца.',
+  'alert.anomaly':'Аномально высокие дни (больше 2,5× медианы {m} кВт·ч): {t}{more}. Стоит вспомнить, что включалось в эти дни.',
+  'alert.anomaly.more':' и ещё {n}',
+  'alert.none':'Замечаний нет: статусы чистые, расход ровный.',
+  'faq.title':'Как это читать',
+  'faq.q1':'Почему показания «накопительные»?',
+  'faq.a1':'Счётчик работает как одометр в машине: цифра только растёт. Расход за любой период — это показание на конец минус показание на начало. Выгрузка содержит снимок всех регистров каждый день в 00:00, поэтому показание на 1-е число месяца — это итог предыдущего месяца.',
+  'faq.q2':'Что такое блочный тариф?',
+  'faq.a2':'Каждый календарный месяц счёт начинается заново: первые 200 кВт·ч месяца оплачиваются по цене 1-го блока, следующие 300 — по цене 2-го, и так далее. Чем больше потребили за месяц, тем дороже каждый следующий киловатт-час.',
+  'faq.q3':'Что такое зоны Т1–Т4 и реактивная энергия?',
+  'faq.a3':'Т1–Т4 — деление суток на временные зоны; счётчик ведёт их отдельно, но при блочном тарифе оплата идёт по общей сумме. Реактивная энергия (+R/−R) — «бесполезная» энергия двигателей и электроники; для населения она не тарифицируется и на оплату не влияет.',
+  'faq.q4':'Что значит «Обратный порядок фаз»?',
+  'faq.a4':'Фазы A-B-C подключены в другом порядке (например A-C-B). На точность учёта современного электронного счётчика это не влияет — он считает верно в любом порядке. Но трёхфазные двигатели вращались бы в обратную сторону, поэтому электрики обычно исправляют подключение. У однофазного счётчика (EX18) такого статуса не бывает — фаза одна.',
+  'faq.q5':'Какие файлы принимает сервис?',
+  'faq.a5':'Стандартную выгрузку умного счётчика: .xlsx или .csv, где есть колонка с датой (Clock) и колонка накопительной активной энергии — Active energy import (+A). Десятичный разделитель может быть и точкой, и запятой. Если колонки названы иначе, сервис покажет ваш файл и попросит указать их вручную — так подойдёт выгрузка любого счётчика.',
+  'faq.q6':'Однофазный счётчик подойдёт?',
+  'faq.a6':'Да. Расчёт не зависит от числа фаз: нужны только дата и накопительное показание активной энергии, а блочный тариф для населения у одно- и трёхфазных одинаковый. Разница лишь в том, что у однофазного не бывает статуса «Обратный порядок фаз», а зоны Т1–Т4 при блочном тарифе всё равно не участвуют в оплате.',
+  'footer.about':'Свет·Учёт — некоммерческий инструмент. Расчёт справочный; итоговую сумму определяет поставщик электроэнергии.',
+  'footer.privacy':'Данные не покидают ваш браузер.',
+  'csv.header':'Месяц;Потреблено кВтч;К оплате сум;Дней;Средний кВтч в сутки',
+  'csv.total':'Итого','csv.name':'расход_по_месяцам.csv',
+  'err.parse':'Не получилось прочитать файл: {e} Проверьте, что это выгрузка счётчика с колонками Clock и Active energy import (+A).',
+  'err.E_TOO_FEW_READINGS':'Заполните хотя бы два месяца: расход — это разница между показаниями.',
+  'err.E_NO_MONTH_PAIRS':'Нет двух показаний за соседние месяцы. Например, 1 января и 1 февраля: их разница и есть расход января.',
+  'err.E_TOO_FEW_ROWS':'Нужно минимум два суточных показания: расход считается как разница между соседними днями. Возьмите выгрузку хотя бы за два дня.',
+  'err.E_NO_ROWS':'В файле не нашлось суточных показаний. Проверьте, что это выгрузка счётчика с колонками Clock и Active energy import (+A).',
+},
+uz:{
+  'page.title':'Свет·Учёт — elektr hisoblagich ko’rsatkichlari tahlili',
+  'page.desc':'Aqlli elektr hisoblagich (EX518, EX18 va mos keluvchilar — bir va uch fazali) yuklamasini yuklang va blokli tarif bo’yicha to’lov, grafiklar va prognozni oling. Hammasi brauzeringizda hisoblanadi.',
+  'og.desc':'Hisoblagich yuklamasi → oylar bo’yicha iste’mol, blokli tarif bo’yicha to’lov, grafiklar va prognoz. Hammasi brauzerda, fayl hech qayerga ketmaydi.',
+  'lang.aria':'Interfeys tili','theme.aria':'Mavzu: yorug’ yoki qorong’i',
+  'print.title':'elektr iste’moli bo’yicha hisobot','print.made':'{d} da tuzilgan',
+  'print.tariff':'Hisob qaysi tariflar bo’yicha bajarilgan','print.block':'Blok','print.range':'oyiga kVt·soat',
+  'print.price':'Narx, so’m/kVt·soat','print.blockN':'{n}-blok',
+  'nav.demo':'Demo ma’lumotlar','nav.print':'Chop etish / PDF','nav.upload':'Faylni yuklash',
+  'hero.h1':'Hisoblagich ko’rsatkichlari —<br>tushunarli <span class="kwh">kVt·soat va so’mda</span>',
+  'hero.lead':'Aqlli hisoblagich (EX518, EX18 va mos keluvchilar — bir va uch fazali) yuklamasini yuklang — oylar bo’yicha iste’mol, blokli tarif bo’yicha to’lov, grafiklar, prognoz va ogohlantirishlarni oling.',
+  'mapper.title':'Ustunlarni aniqlab bo’lmadi',
+  'mapper.hint':'sana va ko’rsatkich qayerdaligini ko’rsating — hisob sizning tanlovingiz bo’yicha ketadi',
+  'mapper.date':'Sana ustuni','mapper.a':'Ko’rsatkich ustuni (+A), kVt·soat',
+  'mapper.status':'Status ustuni (majburiy emas)','mapper.none':'— yo’q —',
+  'mapper.col':'{n}-ustun','mapper.go':'Hisobni ko’rsatish',
+  'mapper.err':'Bu ustunlarda «sana + jamlanma ko’rsatkich» juftligi topilmadi. Boshqasini tanlang — yuqoridagi jadvalda nima qayerdaligi ko’rinadi.',
+  'alert.implausible':'Bir kunda <b>{k} kVt·soat</b> ({d}) maishiy hisoblagich uchun imkonsiz — fayl noto’g’ri o’qilganga o’xshaydi. Ustunlar to’g’ri tanlanganini va sonlar formatini tekshiring. Bunday kunlar: {n} ta.',
+  'drop.big':'Yuklama faylini shu yerga tashlang',
+  'drop.hint':'.xlsx yoki .csv — jamlanma kunlik ko’rsatkichlar bilan',
+  'drop.pick':'Faylni tanlash','drop.demo':'Demo ma’lumotlarda ko’rish','drop.aria':'Hisoblagich yuklama fayli',
+  'privacy':'Fayl hech qayerga yuborilmaydi: barcha hisob-kitoblar brauzeringizda bajariladi. Oynani yopdingiz — ma’lumot qolmaydi.',
+  'lcd.wait':'FAYL KUTILMOQDA','lcd.reading':'KO’RSATKICH · {d}',
+  'badge.demo':'demo ma’lumotlar','badge.manual':'qo’lda kiritilgan','badge.shared':'havoladan',
+  'lcd.period':'DAVR ICHIDA ISTE’MOL',
+  'share.btn':'Havola bilan ulashish','share.copy':'Nusxalash','share.copied':'Nusxalandi',
+  'share.what':'Havolada — faqat oylar bo’yicha iste’mol va sizning tariflaringiz. Kunlik iste’mol ham, hisoblagich ko’rsatkichlari ham, fayl nomi ham unga tushmaydi. Ma’lumot havolaning o’zida yotadi va serverga ketmaydi — lekin kimga yuborsangiz, o’sha bu raqamlarni ko’radi.',
+  'err.E_SHARE_BAD':'Havola buzilgan: undagi ma’lumot o’qilmadi. Yuboruvchidan yangisini so’rang.',
+  'manual.open':'Yuklama yo’qmi? Ko’rsatkichlarni qo’lda kiriting',
+  'manual.title':'Oylar bo’yicha ko’rsatkichlar','manual.hint':'1-sanadagi ko’rsatkich — bu o’tgan oyning yakuni',
+  'manual.close':'Yopish','manual.add':'+ Yana oy','manual.go':'Hisoblash','manual.del':'Qatorni olib tashlash',
+  'manual.th.month':'Oy','manual.th.reading':'1-sanadagi ko’rsatkich, kVt·soat',
+  'manual.note':'Kamida ketma-ket ikkita ko’rsatkich kerak: oylik iste’mol — qo’shni oylarning 1-sanasidagi ko’rsatkichlar farqi.',
+  'manual.gaps':'Ko’rsatkichlar tushib qolgani uchun bu oylar hisobga kirmadi: {list}. Oraliq ko’rsatkichsiz iste’molni oylarga bo’lish mumkin emas — yetishmaganini qo’shing.',
+  'unit.kwh':'kVt·soat','unit.sum':'so’m',
+  'sum.last':'Oxirgi ko’rsatkich','sum.kwh':'Davr ichida iste’mol','sum.cost':'Tarif bo’yicha jami',
+  'sec.alerts':'Ogohlantirishlar','sec.months':'Oylar bo’yicha',
+  'sec.months.sub':'blokli tarif har kalendar oyda qaytadan hisoblanadi',
+  'btn.csv':'CSV yuklab olish',
+  'th.month':'Oy','th.kwh':'Iste’mol, kVt·soat','th.b1':'Blok 1','th.b2':'Blok 2','th.b3':'Blok 3',
+  'th.b4':'Blok 4+','th.cost':'To’lovga, so’m','th.avg':'Kunlik o’rt.',
+  'table.forecast':'{m} — to’liq oyga prognoz','table.total':'Davr uchun jami',
+  'sec.chart.month':'Oylar bo’yicha iste’mol va to’lov','sec.chart.daily':'Kunlar bo’yicha iste’mol',
+  'sec.chart.daily.sub':'qizil nuqtalar — g’ayrioddiy yuqori kunlar',
+  'chart.daily':'kVt·soat/kun','chart.tooltip.cost':'To’lov: {v} so’m','chart.tooltip.kwh':'Iste’mol: {v} kVt·soat',
+  'cmp.title':'Taqqoslash','cmp.hint':'ikkinchi yuklamani yuklang — nima o’zgarganini ko’rasiz',
+  'cmp.pick':'Ikkinchi yuklamani yuklash','cmp.clear':'Olib tashlash',
+  'cmp.aria':'Taqqoslash uchun ikkinchi yuklama','cmp.mode.aria':'Taqqoslash usuli',
+  'cmp.mode.year':'Yildan yilga','cmp.mode.order':'Tartib bo’yicha (oldin/keyin)',
+  'cmp.mode.note.year':'Yanvar yanvar bilan taqqoslanadi va hokazo — mavsumiylik xalaqit bermaydi, turmush tarzidagi o’zgarish ko’rinadi.',
+  'cmp.mode.note.order':'Birinchi oy birinchisi bilan, ikkinchisi ikkinchisi bilan — xarid «oldin va keyin» uchun. Mavsumiylik bu yerda hisobga olinmaydi: yilning taqqoslanadigan qismlarini oling.',
+  'cmp.sub.year':'turli yillarning bir xil oylari','cmp.sub.order':'oylar tartib bo’yicha: oldin → keyin',
+  'cmp.nopairs':'Umumiy oylar topilmadi — taqqoslashga narsa yo’q. Boshqa usulni yoki boshqa yuklamani tanlang.',
+  'cmp.th.was':'Edi, kVt·soat','cmp.th.now':'Bo’ldi, kVt·soat','cmp.th.dkwh':'Δ kVt·soat','cmp.th.pct':'Δ %','cmp.th.dcost':'Δ so’m',
+  'cmp.total':'Umumiy oylar bo’yicha jami',
+  'sec.tariff':'Tariflar','sec.tariff.sub':'oyiga kVt·soat uchun so’m','btn.reset':'Tiklash',
+  'tariff.note':'Narxlarni o’zgartirish mumkin — jadval, grafiklar va kalkulyator darhol qayta hisoblanadi. Qiymatlar shu brauzerda saqlanadi.',
+  'tariff.price.aria':'{n}-blok narxi','tariff.unit':'so’m/kVt·soat',
+  'sec.calc':'To’lov kalkulyatori',
+  'calc.prev':'Oy boshidagi ko’rsatkich, kVt·soat','calc.prev.ph':'mas. 2051,13',
+  'calc.curr':'Yangi ko’rsatkich, kVt·soat','calc.curr.ph':'mas. 2266,62',
+  'calc.days':'O’tgan kunlar','calc.days.ph':'mas. 15','calc.daysm':'Oydagi kunlar',
+  'calc.used':'Iste’mol qilindi','calc.now':'Hozir to’lovga',
+  'calc.fckwh':'To’liq oyga prognoz','calc.fccost':'Oylik summa prognozi',
+  'calc.block':'Blok {n} · {k} × {p}',
+  'calc.err.less':'Yangi ko’rsatkich boshlang’ichdan kichik — raqamlarni tekshiring.',
+  'calc.warn.cross':'Joriy sur’atda oy {b} kVt·soat chegarasidan o’tadi — undan keyin tarif {p} so’m/kVt·soat.',
+  'alert.status.closed':'<b>{s}</b> ({r}) — hisobga ta’sir qilmaydi; status olib tashlangan, ulanish to’g’rilangan.',
+  'alert.status.open':'<b>{s}</b> ({r}). Elektron hisoblagich aniqligiga ta’sir qilmaydi, lekin elektrikka ko’rsatgan ma’qul.',
+  'alert.range.now':' — hozirgi vaqtgacha',
+  'alert.month':'Joriy oy (<b>{m}</b>): {d} kunda {k} kVt·soat. To’liq oyga prognoz — <b>{f} kVt·soat ≈ {c} so’m</b>.',
+  'alert.boundary':'Prognoz <b>{b} kVt·soat</b> chegarasiga yaqin — undan keyin har bir kVt·soat qimmatroq. Yukning bir qismini (kir yuvish, boyler) keyingi oy boshiga ko’chirish mantiqan to’g’ri.',
+  'alert.anomaly':'G’ayrioddiy yuqori kunlar (mediana {m} kVt·soatdan 2,5× ko’p): {t}{more}. O’sha kunlari nima ishlaganini eslash kerak.',
+  'alert.anomaly.more':' va yana {n} ta',
+  'alert.none':'Izohlar yo’q: statuslar toza, iste’mol bir tekis.',
+  'faq.title':'Buni qanday o’qish kerak',
+  'faq.q1':'Nega ko’rsatkichlar «jamlanma»?',
+  'faq.a1':'Hisoblagich mashinadagi odometr kabi ishlaydi: raqam faqat o’sadi. Istalgan davr uchun iste’mol — bu davr oxiridagi ko’rsatkichdan davr boshidagi ko’rsatkichni ayirish. Yuklamada har kuni soat 00:00 dagi barcha registrlar tasviri bo’ladi, shuning uchun oyning 1-sanasidagi ko’rsatkich — oldingi oyning yakuni.',
+  'faq.q2':'Blokli tarif nima?',
+  'faq.a2':'Har kalendar oyda hisob qaytadan boshlanadi: oyning dastlabki 200 kVt·soati 1-blok narxida, keyingi 300 tasi — 2-blok narxida to’lanadi va hokazo. Oyda qancha ko’p iste’mol qilsangiz, har bir keyingi kilovatt-soat shuncha qimmat.',
+  'faq.q3':'T1–T4 zonalari va reaktiv energiya nima?',
+  'faq.a3':'T1–T4 — sutkaning vaqt zonalariga bo’linishi; hisoblagich ularni alohida yuritadi, lekin blokli tarifda to’lov umumiy summa bo’yicha ketadi. Reaktiv energiya (+R/−R) — dvigatel va elektronikaning «foydasiz» energiyasi; aholi uchun u tariflanmaydi va to’lovga ta’sir qilmaydi.',
+  'faq.q4':'«Fazalar tartibi teskari» nimani anglatadi?',
+  'faq.a4':'A-B-C fazalari boshqa tartibda ulangan (masalan A-C-B). Zamonaviy elektron hisoblagich aniqligiga bu ta’sir qilmaydi — u har qanday tartibda to’g’ri hisoblaydi. Ammo uch fazali dvigatellar teskari aylanardi, shuning uchun elektriklar odatda ulanishni to’g’rilaydi. Bir fazali hisoblagichda (EX18) bunday status bo’lmaydi — faza bitta.',
+  'faq.q5':'Xizmat qanday fayllarni qabul qiladi?',
+  'faq.a5':'Aqlli hisoblagichning standart yuklamasini: .xlsx yoki .csv, unda sana ustuni (Clock) va jamlanma aktiv energiya ustuni — Active energy import (+A) bo’lishi kerak. O’nlik ajratgich nuqta ham, vergul ham bo’lishi mumkin. Agar ustunlar boshqacha nomlangan bo’lsa, xizmat faylingizni ko’rsatib, ularni qo’lda tanlashni so’raydi — shunda istalgan hisoblagich yuklamasi mos keladi.',
+  'faq.q6':'Bir fazali hisoblagich mos keladimi?',
+  'faq.a6':'Ha. Hisob fazalar soniga bog’liq emas: faqat sana va aktiv energiyaning jamlanma ko’rsatkichi kerak, aholi uchun blokli tarif esa bir va uch fazalilarda bir xil. Farq shundaki, bir fazalida «Fazalar tartibi teskari» statusi bo’lmaydi, T1–T4 zonalari esa blokli tarifda baribir to’lovga kirmaydi.',
+  'footer.about':'Свет·Учёт — notijorat vosita. Hisob ma’lumot uchun; yakuniy summani elektr energiyasi yetkazib beruvchisi belgilaydi.',
+  'footer.privacy':'Ma’lumotlar brauzeringizdan chiqmaydi.',
+  'csv.header':'Oy;Iste’mol kVtsoat;To’lovga so’m;Kunlar;Kunlik o’rtacha kVtsoat',
+  'csv.total':'Jami','csv.name':'oylik_istemol.csv',
+  'err.parse':'Faylni o’qib bo’lmadi: {e} Bu Clock va Active energy import (+A) ustunlari bo’lgan hisoblagich yuklamasi ekanini tekshiring.',
+  'err.E_TOO_FEW_READINGS':'Kamida ikkita oyni to’ldiring: iste’mol — ko’rsatkichlar farqi.',
+  'err.E_NO_MONTH_PAIRS':'Qo’shni oylar uchun ikkita ko’rsatkich yo’q. Masalan, 1 yanvar va 1 fevral: ularning farqi yanvar iste’moli bo’ladi.',
+  'err.E_TOO_FEW_ROWS':'Kamida ikkita kunlik ko’rsatkich kerak: iste’mol qo’shni kunlar farqi sifatida hisoblanadi. Kamida ikki kunlik yuklamani oling.',
+  'err.E_NO_ROWS':'Faylda kunlik ko’rsatkichlar topilmadi. Bu Clock va Active energy import (+A) ustunlari bo’lgan hisoblagich yuklamasi ekanini tekshiring.',
+},
+uzc:{
+  'page.title':'Свет·Учёт — электр ҳисоблагич кўрсаткичлари таҳлили',
+  'page.desc':'Ақлли электр ҳисоблагич (EX518, EX18 ва мос келувчилар — бир ва уч фазали) юкламасини юкланг ва блокли тариф бўйича тўлов, графиклар ва прогнозни олинг. Ҳаммаси браузерингизда ҳисобланади.',
+  'og.desc':'Ҳисоблагич юкламаси → ойлар бўйича истеъмол, блокли тариф бўйича тўлов, графиклар ва прогноз. Ҳаммаси браузерда, файл ҳеч қаерга кетмайди.',
+  'lang.aria':'Интерфейс тили','theme.aria':'Мавзу: ёруғ ёки қоронғи',
+  'print.title':'электр истеъмоли бўйича ҳисобот','print.made':'{d} да тузилган',
+  'print.tariff':'Ҳисоб қайси тарифлар бўйича бажарилган','print.block':'Блок','print.range':'ойига кВт·соат',
+  'print.price':'Нарх, сўм/кВт·соат','print.blockN':'{n}-блок',
+  'nav.demo':'Демо маълумотлар','nav.print':'Чоп этиш / PDF','nav.upload':'Файлни юклаш',
+  'hero.h1':'Ҳисоблагич кўрсаткичлари —<br>тушунарли <span class="kwh">кВт·соат ва сўмда</span>',
+  'hero.lead':'Ақлли ҳисоблагич (EX518, EX18 ва мос келувчилар — бир ва уч фазали) юкламасини юкланг — ойлар бўйича истеъмол, блокли тариф бўйича тўлов, графиклар, прогноз ва огоҳлантиришларни олинг.',
+  'mapper.title':'Устунларни аниқлаб бўлмади',
+  'mapper.hint':'сана ва кўрсаткич қаердалигини кўрсатинг — ҳисоб сизнинг танловингиз бўйича кетади',
+  'mapper.date':'Сана устуни','mapper.a':'Кўрсаткич устуни (+A), кВт·соат',
+  'mapper.status':'Статус устуни (мажбурий эмас)','mapper.none':'— йўқ —',
+  'mapper.col':'{n}-устун','mapper.go':'Ҳисобни кўрсатиш',
+  'mapper.err':'Бу устунларда «сана + жамланма кўрсаткич» жуфтлиги топилмади. Бошқасини танланг — юқоридаги жадвалда нима қаердалиги кўринади.',
+  'alert.implausible':'Бир кунда <b>{k} кВт·соат</b> ({d}) маиший ҳисоблагич учун имконсиз — файл нотўғри ўқилганга ўхшайди. Устунлар тўғри танланганини ва сонлар форматини текширинг. Бундай кунлар: {n} та.',
+  'drop.big':'Юклама файлини шу ерга ташланг',
+  'drop.hint':'.xlsx ёки .csv — жамланма кунлик кўрсаткичлар билан',
+  'drop.pick':'Файлни танлаш','drop.demo':'Демо маълумотларда кўриш','drop.aria':'Ҳисоблагич юклама файли',
+  'privacy':'Файл ҳеч қаерга юборилмайди: барча ҳисоб-китоблар браузерингизда бажарилади. Ойнани ёпдингиз — маълумот қолмайди.',
+  'lcd.wait':'ФАЙЛ КУТИЛМОҚДА','lcd.reading':'КЎРСАТКИЧ · {d}',
+  'badge.demo':'демо маълумотлар','badge.manual':'қўлда киритилган','badge.shared':'ҳаволадан',
+  'lcd.period':'ДАВР ИЧИДА ИСТЕЪМОЛ',
+  'share.btn':'Ҳавола билан улашиш','share.copy':'Нусхалаш','share.copied':'Нусхаланди',
+  'share.what':'Ҳаволада — фақат ойлар бўйича истеъмол ва сизнинг тарифларингиз. Кунлик истеъмол ҳам, ҳисоблагич кўрсаткичлари ҳам, файл номи ҳам унга тушмайди. Маълумот ҳаволанинг ўзида ётади ва серверга кетмайди — лекин кимга юборсангиз, ўша бу рақамларни кўради.',
+  'err.E_SHARE_BAD':'Ҳавола бузилган: ундаги маълумот ўқилмади. Юборувчидан янгисини сўранг.',
+  'manual.open':'Юклама йўқми? Кўрсаткичларни қўлда киритинг',
+  'manual.title':'Ойлар бўйича кўрсаткичлар','manual.hint':'1-санадаги кўрсаткич — бу ўтган ойнинг якуни',
+  'manual.close':'Ёпиш','manual.add':'+ Яна ой','manual.go':'Ҳисоблаш','manual.del':'Қаторни олиб ташлаш',
+  'manual.th.month':'Ой','manual.th.reading':'1-санадаги кўрсаткич, кВт·соат',
+  'manual.note':'Камида кетма-кет иккита кўрсаткич керак: ойлик истеъмол — қўшни ойларнинг 1-санасидаги кўрсаткичлар фарқи.',
+  'manual.gaps':'Кўрсаткичлар тушиб қолгани учун бу ойлар ҳисобга кирмади: {list}. Оралиқ кўрсаткичсиз истеъмолни ойларга бўлиш мумкин эмас — етишмаганини қўшинг.',
+  'unit.kwh':'кВт·соат','unit.sum':'сўм',
+  'sum.last':'Охирги кўрсаткич','sum.kwh':'Давр ичида истеъмол','sum.cost':'Тариф бўйича жами',
+  'sec.alerts':'Огоҳлантиришлар','sec.months':'Ойлар бўйича',
+  'sec.months.sub':'блокли тариф ҳар календар ойда қайтадан ҳисобланади',
+  'btn.csv':'CSV юклаб олиш',
+  'th.month':'Ой','th.kwh':'Истеъмол, кВт·соат','th.b1':'Блок 1','th.b2':'Блок 2','th.b3':'Блок 3',
+  'th.b4':'Блок 4+','th.cost':'Тўловга, сўм','th.avg':'Кунлик ўрт.',
+  'table.forecast':'{m} — тўлиқ ойга прогноз','table.total':'Давр учун жами',
+  'sec.chart.month':'Ойлар бўйича истеъмол ва тўлов','sec.chart.daily':'Кунлар бўйича истеъмол',
+  'sec.chart.daily.sub':'қизил нуқталар — ғайриоддий юқори кунлар',
+  'chart.daily':'кВт·соат/кун','chart.tooltip.cost':'Тўлов: {v} сўм','chart.tooltip.kwh':'Истеъмол: {v} кВт·соат',
+  'cmp.title':'Таққослаш','cmp.hint':'иккинчи юкламани юкланг — нима ўзгарганини кўрасиз',
+  'cmp.pick':'Иккинчи юкламани юклаш','cmp.clear':'Олиб ташлаш',
+  'cmp.aria':'Таққослаш учун иккинчи юклама','cmp.mode.aria':'Таққослаш усули',
+  'cmp.mode.year':'Йилдан йилга','cmp.mode.order':'Тартиб бўйича (олдин/кейин)',
+  'cmp.mode.note.year':'Январ январ билан таққосланади ва ҳоказо — мавсумийлик халақит бермайди, турмуш тарзидаги ўзгариш кўринади.',
+  'cmp.mode.note.order':'Биринчи ой биринчиси билан, иккинчиси иккинчиси билан — харид «олдин ва кейин» учун. Мавсумийлик бу ерда ҳисобга олинмайди: йилнинг таққосланадиган қисмларини олинг.',
+  'cmp.sub.year':'турли йилларнинг бир хил ойлари','cmp.sub.order':'ойлар тартиб бўйича: олдин → кейин',
+  'cmp.nopairs':'Умумий ойлар топилмади — таққослашга нарса йўқ. Бошқа усулни ёки бошқа юкламани танланг.',
+  'cmp.th.was':'Эди, кВт·соат','cmp.th.now':'Бўлди, кВт·соат','cmp.th.dkwh':'Δ кВт·соат','cmp.th.pct':'Δ %','cmp.th.dcost':'Δ сўм',
+  'cmp.total':'Умумий ойлар бўйича жами',
+  'sec.tariff':'Тарифлар','sec.tariff.sub':'ойига кВт·соат учун сўм','btn.reset':'Тиклаш',
+  'tariff.note':'Нархларни ўзгартириш мумкин — жадвал, графиклар ва калькулятор дарҳол қайта ҳисобланади. Қийматлар шу браузерда сақланади.',
+  'tariff.price.aria':'{n}-блок нархи','tariff.unit':'сўм/кВт·соат',
+  'sec.calc':'Тўлов калькулятори',
+  'calc.prev':'Ой бошидаги кўрсаткич, кВт·соат','calc.prev.ph':'мас. 2051,13',
+  'calc.curr':'Янги кўрсаткич, кВт·соат','calc.curr.ph':'мас. 2266,62',
+  'calc.days':'Ўтган кунлар','calc.days.ph':'мас. 15','calc.daysm':'Ойдаги кунлар',
+  'calc.used':'Истеъмол қилинди','calc.now':'Ҳозир тўловга',
+  'calc.fckwh':'Тўлиқ ойга прогноз','calc.fccost':'Ойлик сумма прогнози',
+  'calc.block':'Блок {n} · {k} × {p}',
+  'calc.err.less':'Янги кўрсаткич бошланғичдан кичик — рақамларни текширинг.',
+  'calc.warn.cross':'Жорий суръатда ой {b} кВт·соат чегарасидан ўтади — ундан кейин тариф {p} сўм/кВт·соат.',
+  'alert.status.closed':'<b>{s}</b> ({r}) — ҳисобга таъсир қилмайди; статус олиб ташланган, уланиш тўғриланган.',
+  'alert.status.open':'<b>{s}</b> ({r}). Электрон ҳисоблагич аниқлигига таъсир қилмайди, лекин электрикка кўрсатган маъқул.',
+  'alert.range.now':' — ҳозирги вақтгача',
+  'alert.month':'Жорий ой (<b>{m}</b>): {d} кунда {k} кВт·соат. Тўлиқ ойга прогноз — <b>{f} кВт·соат ≈ {c} сўм</b>.',
+  'alert.boundary':'Прогноз <b>{b} кВт·соат</b> чегарасига яқин — ундан кейин ҳар бир кВт·соат қимматроқ. Юкнинг бир қисмини (кир ювиш, бойлер) кейинги ой бошига кўчириш мантиқан тўғри.',
+  'alert.anomaly':'Ғайриоддий юқори кунлар (медиана {m} кВт·соатдан 2,5× кўп): {t}{more}. Ўша кунлари нима ишлаганини эслаш керак.',
+  'alert.anomaly.more':' ва яна {n} та',
+  'alert.none':'Изоҳлар йўқ: статуслар тоза, истеъмол бир текис.',
+  'faq.title':'Буни қандай ўқиш керак',
+  'faq.q1':'Нега кўрсаткичлар «жамланма»?',
+  'faq.a1':'Ҳисоблагич машинадаги одометр каби ишлайди: рақам фақат ўсади. Исталган давр учун истеъмол — бу давр охиридаги кўрсаткичдан давр бошидаги кўрсаткични айириш. Юкламада ҳар куни соат 00:00 даги барча регистрлар тасвири бўлади, шунинг учун ойнинг 1-санасидаги кўрсаткич — олдинги ойнинг якуни.',
+  'faq.q2':'Блокли тариф нима?',
+  'faq.a2':'Ҳар календар ойда ҳисоб қайтадан бошланади: ойнинг дастлабки 200 кВт·соати 1-блок нархида, кейинги 300 таси — 2-блок нархида тўланади ва ҳоказо. Ойда қанча кўп истеъмол қилсангиз, ҳар бир кейинги киловатт-соат шунча қиммат.',
+  'faq.q3':'T1–T4 зоналари ва реактив энергия нима?',
+  'faq.a3':'T1–T4 — суткани вақт зоналарига бўлиниши; ҳисоблагич уларни алоҳида юритади, лекин блокли тарифда тўлов умумий сумма бўйича кетади. Реактив энергия (+R/−R) — двигател ва электрониканинг «фойдасиз» энергияси; аҳоли учун у тарифланмайди ва тўловга таъсир қилмайди.',
+  'faq.q4':'«Фазалар тартиби тескари» нимани англатади?',
+  'faq.a4':'A-B-C фазалари бошқа тартибда уланган (масалан A-C-B). Замонавий электрон ҳисоблагич аниқлигига бу таъсир қилмайди — у ҳар қандай тартибда тўғри ҳисоблайди. Аммо уч фазали двигателлар тескари айланарди, шунинг учун электриклар одатда уланишни тўғрилайди. Бир фазали ҳисоблагичда (EX18) бундай статус бўлмайди — фаза битта.',
+  'faq.q5':'Хизмат қандай файлларни қабул қилади?',
+  'faq.a5':'Ақлли ҳисоблагичнинг стандарт юкламасини: .xlsx ёки .csv, унда сана устуни (Clock) ва жамланма актив энергия устуни — Active energy import (+A) бўлиши керак. Ўнлик ажратгич нуқта ҳам, вергул ҳам бўлиши мумкин. Агар устунлар бошқача номланган бўлса, хизмат файлингизни кўрсатиб, уларни қўлда танлашни сўрайди — шунда исталган ҳисоблагич юкламаси мос келади.',
+  'faq.q6':'Бир фазали ҳисоблагич мос келадими?',
+  'faq.a6':'Ҳа. Ҳисоб фазалар сонига боғлиқ эмас: фақат сана ва актив энергиянинг жамланма кўрсаткичи керак, аҳоли учун блокли тариф эса бир ва уч фазалиларда бир хил. Фарқ шундаки, бир фазалида «Фазалар тартиби тескари» статуси бўлмайди, T1–T4 зоналари эса блокли тарифда барибир тўловга кирмайди.',
+  'footer.about':'Свет·Учёт — нотижорат восита. Ҳисоб маълумот учун; якуний суммани электр энергияси етказиб берувчиси белгилайди.',
+  'footer.privacy':'Маълумотлар браузерингиздан чиқмайди.',
+  'csv.header':'Ой;Истеъмол кВтсоат;Тўловга сўм;Кунлар;Кунлик ўртача кВтсоат',
+  'csv.total':'Жами','csv.name':'ойлик_истеъмол.csv',
+  'err.parse':'Файлни ўқиб бўлмади: {e} Бу Clock ва Active energy import (+A) устунлари бўлган ҳисоблагич юкламаси эканини текширинг.',
+  'err.E_TOO_FEW_READINGS':'Камида иккита ойни тўлдиринг: истеъмол — кўрсаткичлар фарқи.',
+  'err.E_NO_MONTH_PAIRS':'Қўшни ойлар учун иккита кўрсаткич йўқ. Масалан, 1 январ ва 1 феврал: уларнинг фарқи январ истеъмоли бўлади.',
+  'err.E_TOO_FEW_ROWS':'Камида иккита кунлик кўрсаткич керак: истеъмол қўшни кунлар фарқи сифатида ҳисобланади. Камида икки кунлик юкламани олинг.',
+  'err.E_NO_ROWS':'Файлда кунлик кўрсаткичлар топилмади. Бу Clock ва Active energy import (+A) устунлари бўлган ҳисоблагич юкламаси эканини текширинг.',
+},
+};
+function t(key, params){
+  let s = (STR[lang] && STR[lang][key]) ?? STR.ru[key] ?? key;
+  if (params) for (const k in params) s = s.split('{'+k+'}').join(params[k]);
+  return s;
+}
+
+/* ---------- состояние ---------- */
+let lang = loadLang();
+let tariff = loadTariff();
+let A = null;          // результат analyze
+let charts = {};
+let fileName = null;   // как подписать источник данных
+let fileIsDemo = false;
+let fileIsManual = false;
+let fileIsShared = false;
+
+/* ?lang= важнее localStorage: присланная ссылка должна открыться на том языке,
+   который обещает, — и у человека, и у краулера (localStorage у него нет). */
+function loadLang(){
+  try{
+    const q = new URLSearchParams(location.search).get('lang');
+    if (LANGS.includes(q)) return q;
+  }catch(e){}
+  try{
+    const s = localStorage.getItem('svetuchet_lang_v1');
+    if (LANGS.includes(s)) return s;
+  }catch(e){}
+  return 'ru';
+}
+
+/* ---------- SEO ----------
+   Домен продублирован в <head> (canonical/hreflang/og) — при переезде менять оба места.
+   Русская версия живёт в корне без параметра, чтобы не плодить дубли URL. */
+const SITE_URL = 'https://svet.nurkamol.com';
+const OG_LOCALE = {ru:'ru_RU', uz:'uz_UZ', uzc:'uz_UZ'};
+const langUrl = l => SITE_URL + '/' + (l === 'ru' ? '' : '?lang=' + l);
+
+function applySeo(){
+  const url = langUrl(lang);
+  const set = (sel, attr, val) => { const el = document.querySelector(sel); if (el) el.setAttribute(attr, val); };
+  set('link[rel="canonical"]', 'href', url);
+  set('meta[property="og:url"]', 'content', url);
+  set('meta[name="description"]', 'content', t('page.desc'));
+  set('meta[property="og:title"]', 'content', t('page.title'));
+  set('meta[name="twitter:title"]', 'content', t('page.title'));
+  set('meta[property="og:description"]', 'content', t('og.desc'));
+  set('meta[name="twitter:description"]', 'content', t('og.desc'));
+  set('meta[property="og:locale"]', 'content', OG_LOCALE[lang]);
+  // Адрес в строке браузера должен совпадать с тем, что на экране.
+  // location.hash обязателен: в нём живут данные ссылки-шэринга, иначе смена языка их сотрёт.
+  try{
+    const base = lang === 'ru' ? location.pathname : '?lang=' + lang;
+    history.replaceState(null, '', base + location.hash);
+  }catch(e){}
+  renderJsonLd();
+}
+/* Разметка собирается из того же словаря, что и интерфейс: FAQ в выдаче не разойдётся
+   с тем, что человек прочтёт на странице, и переводится вместе с ней. */
+function renderJsonLd(){
+  const faq = [];
+  for (let i=1; STR.ru['faq.q'+i]; i++)
+    faq.push({'@type':'Question', name:t('faq.q'+i),
+              acceptedAnswer:{'@type':'Answer', text:t('faq.a'+i)}});
+  const data = {'@context':'https://schema.org', '@graph':[
+    {'@type':'WebApplication', '@id':SITE_URL+'/#app', name:'Свет·Учёт',
+     url:langUrl(lang), applicationCategory:'UtilitiesApplication', operatingSystem:'Any',
+     inLanguage:HTML_LANG[lang], description:t('page.desc'),
+     browserRequirements:'Requires JavaScript',
+     offers:{'@type':'Offer', price:'0', priceCurrency:'UZS'}},
+    {'@type':'FAQPage', '@id':SITE_URL+'/#faq', inLanguage:HTML_LANG[lang], mainEntity:faq},
+  ]};
+  let el = document.getElementById('ldjson');
+  if (!el){
+    el = document.createElement('script');
+    el.type = 'application/ld+json'; el.id = 'ldjson';
+    document.head.appendChild(el);
+  }
+  el.textContent = JSON.stringify(data);
+}
+function applyLang(l){
+  lang = LANGS.includes(l) ? l : 'ru';
+  try{ localStorage.setItem('svetuchet_lang_v1', lang); }catch(e){}
+  document.documentElement.lang = HTML_LANG[lang];
+  document.title = t('page.title');
+  applySeo();
+  document.querySelectorAll('[data-i18n]').forEach(el=>{ el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-html]').forEach(el=>{ el.innerHTML = t(el.dataset.i18nHtml); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=>{ el.placeholder = t(el.dataset.i18nPh); });
+  document.querySelectorAll('[data-i18n-aria]').forEach(el=>{ el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
+  document.querySelectorAll('#langsw button').forEach(b=>{
+    b.setAttribute('aria-pressed', String(b.dataset.lang === lang));
+  });
+  renderTariff();
+  // подписи колонок строятся в JS — пересоберём, сохранив выбор пользователя
+  if (mapGrid) buildMapper(+document.getElementById('mapDate').value,
+                           +document.getElementById('mapA').value,
+                           +document.getElementById('mapSt').value);
+  refresh();   // таблица, алерты, графики и калькулятор — на новом языке
+}
+document.querySelectorAll('#langsw button').forEach(b=>{
+  b.onclick = ()=>applyLang(b.dataset.lang);
+});
+
+function loadTariff(){
+  try{
+    const s = localStorage.getItem('svetuchet_tariff_v1');
+    if (s){ const t = JSON.parse(s); if (Array.isArray(t) && t.length===6) return t; }
+  }catch(e){}
+  return DEFAULT_TARIFF.map(b=>({...b}));
+}
+function saveTariff(){ try{ localStorage.setItem('svetuchet_tariff_v1', JSON.stringify(tariff)); }catch(e){} }
+
+/* ---------- утилиты формата ---------- */
+const fmt0 = n => new Intl.NumberFormat('ru-RU').format(Math.round(n));
+const fmt1 = n => new Intl.NumberFormat('ru-RU',{minimumFractionDigits:1,maximumFractionDigits:1}).format(n);
+const fmt2 = n => new Intl.NumberFormat('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
+const fmtD = d => d.toLocaleDateString('ru-RU');
+
+/* ---------- загрузка файла ---------- */
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('fileInput');
+document.getElementById('btnPick').onclick = ()=>fileInput.click();
+document.getElementById('btnUploadTop').onclick = ()=>fileInput.click();
+fileInput.onchange = e => { if (e.target.files[0]) handleFile(e.target.files[0]); };
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('drag');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('drag');}));
+drop.addEventListener('drop', e=>{ const f=e.dataTransfer.files[0]; if(f) handleFile(f); });
+
+function showErr(msg){
+  const el = document.getElementById('parseErr');
+  el.textContent = msg; el.classList.remove('hidden');
+}
+/* Ядро бросает коды (E_*); всё остальное — неожиданная ошибка от XLSX и т.п. */
+function errText(err){
+  const key = 'err.' + err.message;
+  return STR.ru[key] ? t(key) : t('err.parse', {e: err.message});
+}
+
+const handleFile = file => readSheet(file, 'main');
+
+/* Один путь чтения для обоих слотов: главный файл и файл для сравнения.
+   target: 'main' | 'compare' — куда положить результат и куда показать ошибку. */
+function readSheet(file, target){
+  const errBox = target === 'compare' ? 'cmpErr' : 'parseErr';
+  document.getElementById(errBox).classList.add('hidden');
+  const reader = new FileReader();
+  let grid = null;   // нужен и в catch: по нему предлагаем выбрать колонки вручную
+  reader.onload = e => {
+    try{
+      /* raw:true — только для текстовых форматов (.csv): иначе SheetJS сам типизирует
+         ячейки и портит нашу выгрузку — «108,59» читает как 10859 (запятая = разделитель
+         тысяч), «02/01/2026» как mm/dd → 1 февраля. Со строками разбираются parseNum и
+         parseDate, которые знают про запятую и dd/mm. На .xlsx опция не влияет: там даты
+         и числа приходят типизированными, как и раньше. */
+      const wb = XLSX.read(e.target.result, {type:'array', raw:true});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      grid = XLSX.utils.sheet_to_json(ws, {header:1, raw:true});
+      const rows = extractRows(grid);
+      hideMapper();
+      const parsed = analyze(rows);
+      if (target === 'compare'){ B = parsed; fileNameB = file.name; renderCompare(); }
+      else { A = parsed; render(file.name, false); }
+    }catch(err){
+      // колонки не опознаны — не гадаем, а показываем файл и спрашиваем
+      if (err.message === 'E_NO_ROWS' && grid && grid.length) offerMapping(grid, file.name, target);
+      else {
+        const el = document.getElementById(errBox);
+        el.textContent = errText(err); el.classList.remove('hidden');
+      }
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+/* ---------- сопоставление колонок вручную ---------- */
+let mapGrid = null, mapFile = null, mapTarget = 'main';   // куда положить разобранное
+const PREVIEW_ROWS = 6;
+
+function hideMapper(){
+  document.getElementById('mapper').classList.add('hidden');
+  document.getElementById('mapErr').classList.add('hidden');
+  mapGrid = null;
+}
+function colCount(grid){
+  return grid.slice(0, 50).reduce((n, r) => Math.max(n, (r||[]).length), 0);
+}
+/* Подсказываем выбор: дата — первая колонка, где разбирается дата; показание —
+   последняя числовая (в выгрузках +A стоит справа, слева обычно порядковый номер). */
+function guessCols(grid){
+  const n = colCount(grid);
+  const sample = grid.slice(-5);                       // строки данных, а не заголовок
+  let dateCol = 0, aCol = n > 1 ? 1 : 0;
+  for (let c=0;c<n;c++) if (sample.some(r=>parseDate((r||[])[c]))) { dateCol = c; break; }
+  for (let c=n-1;c>=0;c--){
+    if (c === dateCol) continue;
+    if (sample.some(r=>isFinite(parseNum((r||[])[c])))) { aCol = c; break; }
+  }
+  return {dateCol, aCol};
+}
+function offerMapping(grid, fname, target){
+  mapGrid = grid; mapFile = fname; mapTarget = target || 'main';
+  document.getElementById('parseErr').classList.add('hidden');
+  const g = guessCols(grid);
+  buildMapper(g.dateCol, g.aCol, -1);
+  const el = document.getElementById('mapper');
+  el.classList.remove('hidden');
+  el.scrollIntoView({behavior:'smooth', block:'start'});
+}
+/* Строится заново при смене языка, поэтому текущий выбор передаём внутрь. */
+function buildMapper(dateCol, aCol, stCol){
+  const n = colCount(mapGrid);
+  const head = mapGrid[0] || [];
+  const label = c => {
+    const h = String(head[c] ?? '').trim();
+    return t('mapper.col', {n: c+1}) + (h ? ' · ' + (h.length > 28 ? h.slice(0,28)+'…' : h) : '');
+  };
+  const fill = (id, sel, withNone) => {
+    const s = document.getElementById(id);
+    s.innerHTML = (withNone ? '<option value="-1">'+t('mapper.none')+'</option>' : '');
+    for (let c=0;c<n;c++) s.insertAdjacentHTML('beforeend', '<option value="'+c+'">'+label(c)+'</option>');
+    s.value = String(sel);
+  };
+  fill('mapDate', dateCol, false);
+  fill('mapA', aCol, false);
+  fill('mapSt', stCol, true);
+
+  const tb = document.getElementById('mapPreview');
+  let html = '<thead><tr>';
+  for (let c=0;c<n;c++) html += '<th>'+t('mapper.col',{n:c+1})+'</th>';
+  html += '</tr></thead><tbody>';
+  for (const r of mapGrid.slice(0, PREVIEW_ROWS)){
+    html += '<tr>';
+    for (let c=0;c<n;c++) html += '<td>'+String((r||[])[c] ?? '')+'</td>';
+    html += '</tr>';
+  }
+  tb.innerHTML = html + '</tbody>';
+  markPicked();
+}
+/* Подсвечиваем выбранные колонки в превью — видно, что именно уйдёт в расчёт. */
+function markPicked(){
+  const dc = +document.getElementById('mapDate').value;
+  const ac = +document.getElementById('mapA').value;
+  document.querySelectorAll('#mapPreview tr').forEach(tr=>{
+    [...tr.children].forEach((cell,i)=>cell.classList.toggle('picked', i===dc || i===ac));
+  });
+}
+['mapDate','mapA'].forEach(id=>document.getElementById(id).addEventListener('change', markPicked));
+document.getElementById('mapGo').onclick = ()=>{
+  if (!mapGrid) return;
+  const err = document.getElementById('mapErr');
+  err.classList.add('hidden');
+  const dc = +document.getElementById('mapDate').value;
+  const ac = +document.getElementById('mapA').value;
+  const sc = +document.getElementById('mapSt').value;
+  const rows = rowsFromCols(mapGrid, dc, ac, sc, 0);
+  try{
+    const parsed = analyze(rows);   // бросит E_TOO_FEW_ROWS, если пара выбрана неверно
+    const fname = mapFile, target = mapTarget;
+    hideMapper();
+    if (target === 'compare'){ B = parsed; fileNameB = fname; renderCompare(); }
+    else { A = parsed; render(fname, false); }
+  }catch(e){
+    err.textContent = e.message === 'E_TOO_FEW_ROWS' ? t('mapper.err') : errText(e);
+    err.classList.remove('hidden');
+  }
+};
+
+/* ---------- ссылка-шэринг ---------- */
+const shareBox = document.getElementById('shareBox');
+
+/* Из ссылки приходят только помесячные итоги — ни показаний счётчика, ни суточных
+   данных. Структура та же, что у analyze, но rows/daily пусты. */
+function analyzeShared(months){
+  return {rows:[], daily:[], months, statuses:[], manual:true, shared:true,
+          firstDate: months[0].from, lastDate: months[months.length-1].to,
+          firstA: 0, lastA: 0};
+}
+document.getElementById('btnShare').onclick = ()=>{
+  if (!A) return;
+  const url = location.origin + location.pathname +
+              (lang === 'ru' ? '' : '?lang=' + lang) + '#d=' + encodeShare(A.months, tariff);
+  document.getElementById('shareUrl').value = url;
+  shareBox.classList.toggle('hidden');
+  if (!shareBox.classList.contains('hidden')) document.getElementById('shareUrl').select();
+};
+document.getElementById('btnShareCopy').onclick = async ()=>{
+  const inp = document.getElementById('shareUrl');
+  inp.select();
+  const btn = document.getElementById('btnShareCopy');
+  try{ await navigator.clipboard.writeText(inp.value); }
+  catch(e){ try{ document.execCommand('copy'); }catch(_){} }   // запасной путь без https
+  btn.textContent = t('share.copied');
+  setTimeout(()=>{ btn.textContent = t('share.copy'); }, 1600);
+};
+/* Открыли присланную ссылку — показываем расчёт. Тариф берём из ссылки: иначе цифры
+   получателя разъедутся с тем, что видел отправитель. */
+function loadFromHash(){
+  const h = location.hash.replace(/^#/, '');
+  if (!h.startsWith('d=')) return false;
+  try{
+    const {months, tariff:t2} = decodeShare(decodeURIComponent(h.slice(2)));
+    tariff = t2; saveTariff(); renderTariff();
+    A = analyzeShared(months);
+    render(null, false, false);
+    fileIsShared = true;
+    paintResults();
+    return true;
+  }catch(e){
+    showErr(t('err.E_SHARE_BAD'));
+    return false;
+  }
+}
+
+/* Смена только фрагмента — навигация внутри страницы: перезагрузки не будет, поэтому
+   ссылку, вставленную в адресную строку открытой вкладки, ловим отдельно. */
+addEventListener('hashchange', ()=>loadFromHash());
+
+/* ---------- ручной ввод показаний ---------- */
+const manualBox = document.getElementById('manual');
+
+document.getElementById('btnManual').onclick = ()=>{
+  hideMapper();
+  document.getElementById('manualErr').classList.add('hidden');
+  if (!document.querySelector('#manualTable tbody tr')) seedManualRows();
+  manualBox.classList.remove('hidden');
+  manualBox.scrollIntoView({behavior:'smooth', block:'start'});
+};
+document.getElementById('btnManualClose').onclick = ()=>manualBox.classList.add('hidden');
+document.getElementById('btnManualAdd').onclick = ()=>addManualRow();
+
+/* Подставляем последние месяцы: чаще всего человек переписывает свежие показания. */
+function seedManualRows(){
+  const now = new Date();
+  for (let i=3;i>=0;i--){
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    addManualRow(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'));
+  }
+}
+function addManualRow(monthVal){
+  const tb = document.querySelector('#manualTable tbody');
+  const tr = document.createElement('tr');
+  tr.innerHTML =
+    '<td><input type="month" value="'+(monthVal||'')+'" placeholder="2026-01" data-role="month"></td>'+
+    '<td><input inputmode="decimal" placeholder="2051,13" data-role="a"></td>'+
+    '<td><button type="button" class="row-del" aria-label="'+t('manual.del')+'">✕</button></td>';
+  tr.querySelector('.row-del').onclick = ()=>tr.remove();
+  tb.appendChild(tr);
+  return tr;
+}
+/* Safari не умеет input[type=month] и покажет обычное поле — принимаем и «2026-01»,
+   и «01/2026», и «01.2026». */
+function parseMonthField(v){
+  const s = String(v||'').trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})$/);
+  if (m) return {y:+m[1], m:+m[2]-1};
+  m = s.match(/^(\d{1,2})[\/.\-](\d{4})$/);
+  if (m) return {y:+m[2], m:+m[1]-1};
+  return null;
+}
+function readManualRows(){
+  const out = [];
+  for (const tr of document.querySelectorAll('#manualTable tbody tr')){
+    const mv = parseMonthField(tr.querySelector('[data-role=month]').value);
+    const a = parseNum(tr.querySelector('[data-role=a]').value);
+    if (mv && isFinite(a) && mv.m >= 0 && mv.m <= 11) out.push({y:mv.y, m:mv.m, a});
+  }
+  return out;
+}
+document.getElementById('btnManualGo').onclick = ()=>{
+  const err = document.getElementById('manualErr');
+  err.classList.add('hidden');
+  const readings = readManualRows();
+  try{
+    const parsed = analyzeManual(readings);
+    manualBox.classList.add('hidden');
+    A = parsed;
+    render(null, false, true);
+    if (parsed.skipped.length) showManualGaps(parsed.skipped);
+  }catch(e){
+    err.textContent = e.message === 'E_TOO_FEW_READINGS' ? t('err.E_TOO_FEW_READINGS')
+                    : e.message === 'E_NO_MONTH_PAIRS'  ? t('err.E_NO_MONTH_PAIRS')
+                    : errText(e);
+    err.classList.remove('hidden');
+  }
+};
+/* О пропущенных месяцах молчать нельзя: человек ввёл показания, а они не в расчёте. */
+function showManualGaps(skipped){
+  const box = document.getElementById('alerts');
+  const div = document.createElement('div');
+  div.className = 'alert';
+  const list = skipped.map(s=>monthLabel(s.y, s.m, lang)).join(', ');
+  div.innerHTML = '<span class="led on"></span><span>'+t('manual.gaps', {list})+'</span>';
+  box.insertBefore(div, box.firstChild);
+}
+
+/* ---------- сравнение двух выгрузок ---------- */
+let B = null, fileNameB = null, cmpMode = 'year';
+
+document.getElementById('btnCmpPick').onclick = ()=>document.getElementById('cmpInput').click();
+document.getElementById('cmpInput').onchange = e => {
+  if (e.target.files[0]) readSheet(e.target.files[0], 'compare');
+  e.target.value = '';        // тот же файл можно выбрать повторно
+};
+document.getElementById('btnCmpClear').onclick = ()=>{
+  B = null; fileNameB = null;
+  charts.cmp?.destroy(); charts.cmp = null;
+  document.getElementById('cmpBody').classList.add('hidden');
+  document.getElementById('btnCmpClear').classList.add('hidden');
+  document.getElementById('cmpErr').classList.add('hidden');
+  document.getElementById('cmpSub').textContent = t('cmp.hint');
+};
+document.querySelectorAll('.cmp-modes button').forEach(b=>{
+  b.onclick = ()=>{ cmpMode = b.dataset.mode; renderCompare(); };
+});
+
+function renderCompare(){
+  // на бумаге секция нужна, только когда есть что сравнивать
+  document.getElementById('cmpSection').classList.toggle('no-print', !(A && B));
+  if (!A || !B) return;
+  document.getElementById('cmpErr').classList.add('hidden');
+  document.getElementById('cmpBody').classList.remove('hidden');
+  document.getElementById('btnCmpClear').classList.remove('hidden');
+  document.querySelectorAll('.cmp-modes button').forEach(b=>
+    b.setAttribute('aria-pressed', String(b.dataset.mode === cmpMode)));
+  document.getElementById('cmpModeNote').textContent = t('cmp.mode.note.' + cmpMode);
+  document.getElementById('cmpBadgeA').textContent = '📄 ' + sourceLabel();
+  document.getElementById('cmpBadgeB').textContent = '📄 ' + fileNameB;
+
+  const c = compareMonths(A.months, B.months, cmpMode, tariff);
+  const tb = document.querySelector('#cmpTable tbody'); tb.innerHTML = '';
+  if (!c.rows.length){
+    document.getElementById('cmpSub').textContent = t('cmp.nopairs');
+    charts.cmp?.destroy(); charts.cmp = null;
+    return;
+  }
+  document.getElementById('cmpSub').textContent = t('cmp.sub.' + cmpMode);
+
+  const cls = d => d > 0 ? 'up' : (d < 0 ? 'down' : '');
+  const sign = (v, f) => (v > 0 ? '+' : v < 0 ? '−' : '') + f(Math.abs(v));
+  for (const r of c.rows){
+    // в режиме «год к году» месяц один и тот же, различаются годы
+    const label = cmpMode === 'year'
+      ? monthLabel(r.a.y, r.a.m, lang) + ' → ' + r.b.y
+      : monthLabel(r.a.y, r.a.m, lang) + ' → ' + monthLabel(r.b.y, r.b.m, lang);
+    tb.insertAdjacentHTML('beforeend',
+      '<tr><td>'+label+'</td>'+
+      '<td class="num">'+fmt1(r.a.kwh)+'</td><td class="num">'+fmt1(r.b.kwh)+'</td>'+
+      '<td class="num '+cls(r.dKwh)+'">'+sign(r.dKwh, fmt1)+'</td>'+
+      '<td class="num '+cls(r.dKwh)+'">'+(r.pct==null ? '—' : sign(r.pct, v=>fmt1(v)+' %'))+'</td>'+
+      '<td class="money '+cls(r.dCost)+'">'+sign(r.dCost, fmt0)+'</td></tr>');
+  }
+  tb.insertAdjacentHTML('beforeend',
+    '<tr class="total"><td>'+t('cmp.total')+'</td>'+
+    '<td class="num">'+fmt1(c.kwhA)+'</td><td class="num">'+fmt1(c.kwhB)+'</td>'+
+    '<td class="num '+cls(c.dKwh)+'">'+sign(c.dKwh, fmt1)+'</td>'+
+    '<td class="num '+cls(c.dKwh)+'">'+(c.pct==null ? '—' : sign(c.pct, v=>fmt1(v)+' %'))+'</td>'+
+    '<td class="money '+cls(c.dCost)+'">'+sign(c.dCost, fmt0)+'</td></tr>');
+
+  renderCmpChart(c);
+}
+
+function renderCmpChart(c){
+  const {accent:cAccent, money:cMoney, grid:cGrid} = chartColors();
+  const labels = c.rows.map(r => cmpMode === 'year'
+    ? monthNames(lang)[r.a.m].slice(0,3)
+    : monthNames(lang)[r.a.m].slice(0,3)+'→'+monthNames(lang)[r.b.m].slice(0,3));
+  charts.cmp?.destroy();
+  charts.cmp = new Chart(document.getElementById('chCmp'), {
+    plugins:[snapshotPlugin],
+    type:'bar',
+    data:{labels, datasets:[
+      {label: sourceLabel(),
+       data: c.rows.map(r=>+r.a.kwh.toFixed(1)), backgroundColor:cAccent+'99', borderRadius:4},
+      {label: fileNameB || 'B',
+       data: c.rows.map(r=>+r.b.kwh.toFixed(1)), backgroundColor:cMoney+'CC', borderRadius:4},
+    ]},
+    options:{maintainAspectRatio:false,
+      scales:{y:{title:{display:true, text:t('unit.kwh')}, grid:{color:cGrid}}},
+      plugins:{tooltip:{callbacks:{label:x=>x.dataset.label+': '+fmt1(x.parsed.y)+' '+t('unit.kwh')}}}}
+  });
+}
+
+/* ---------- демо ---------- */
+function demoData(){
+  const rows=[]; let a=47.53; const start=new Date(2025,10,3);
+  for (let i=0;i<256;i++){
+    const d=new Date(start); d.setDate(start.getDate()+i);
+    rows.push({date:d, a:+a.toFixed(2), status: d < new Date(2026,5,5) ? '[Phase Sequence Reversal]' : ''});
+    const m=d.getMonth();
+    let base = [12,9,7,5.5,4.5,5.8,9.7,13,12,8,6,10][m];        // сезонность
+    if (Math.random()<0.05) base*=2.4;                            // редкие всплески
+    a += base*(0.75+Math.random()*0.5);
+  }
+  return rows;
+}
+document.getElementById('btnDemo').onclick =
+document.getElementById('btnDemo2').onclick = ()=>{
+  hideMapper();
+  A = analyze(demoData());
+  render(null, true);
+};
+
+/* ---------- отрисовка ---------- */
+/* paintResults — всё, что зависит от языка и тарифа; render — ещё и первый показ. */
+/* Откуда данные: файл, демо или ручной ввод — подписывается везде одинаково. */
+const sourceLabel = () => fileIsDemo ? t('badge.demo')
+                        : fileIsShared ? t('badge.shared')
+                        : fileIsManual ? t('badge.manual')
+                        : (fileName || 'A');
+function paintResults(){
+  document.getElementById('fileBadge').textContent = '📄 ' + sourceLabel();
+  // при ручном вводе суточных данных нет — график по дням прятать, а не рисовать пустым
+  document.getElementById('dailyCard').classList.toggle('hidden', !!A.manual);
+  document.getElementById('periodBadge').textContent = fmtD(A.firstDate)+' — '+fmtD(A.lastDate);
+  /* Показаний счётчика нет, когда данные пришли ссылкой: там только итоги по месяцам.
+     Показывать «последнее показание» было бы враньём — плитку прячем, а на большом ЖК
+     выводим расход за период. */
+  const hasReadings = A.rows.length > 0;
+  document.getElementById('lastCard').classList.toggle('hidden', !hasReadings);
+  document.getElementById('lcdHero').textContent = hasReadings
+    ? fmt2(A.lastA).replace(/\u00A0/g,' ')
+    : fmt1(A.months.reduce((s,m)=>s+m.kwh,0)).replace(/\u00A0/g,' ');
+  document.getElementById('lcdHeroLabel').textContent = hasReadings
+    ? t('lcd.reading', {d: fmtD(A.lastDate)})
+    : t('lcd.period');
+  const anyStatus = A.statuses.some(s=>!s.to || s.to >= A.lastDate);
+  document.getElementById('lcdLed').classList.toggle('on', anyStatus);
+  renderSummary(); renderAlerts(); renderMonthTable(); renderCharts();
+  renderCompare();   // сам ничего не делает, пока второй выгрузки нет
+  renderPrintBits();
+}
+/* Всё, что появляется только на бумаге. Собираем при каждой отрисовке, а не в момент
+   печати: window.print() блокирующий, дорисовать после него уже нечего. */
+function renderPrintBits(){
+  document.getElementById('printTitle').textContent = t('print.title');
+  document.getElementById('printMeta').textContent =
+    [sourceLabel(), fmtD(A.firstDate)+' — '+fmtD(A.lastDate), t('print.made', {d: fmtD(new Date())})].join(' · ');
+  const tb = document.querySelector('#printTariffTable tbody');
+  tb.innerHTML = '';
+  let lower = 0;
+  tariff.forEach((b, i) => {
+    const range = b.upto == null ? fmt0(lower)+'+' : fmt0(lower)+'–'+fmt0(b.upto);
+    tb.insertAdjacentHTML('beforeend',
+      '<tr><td>'+t('print.blockN', {n:i+1})+'</td><td class="num">'+range+'</td>'+
+      '<td class="num">'+fmt0(b.price)+'</td></tr>');
+    lower = b.upto ?? lower;
+  });
+}
+function render(fname, isDemo, isManual){
+  fileName = fname; fileIsDemo = !!isDemo; fileIsManual = !!isManual; fileIsShared = false;
+  document.getElementById('results').classList.remove('hidden');
+  document.getElementById('btnPrint').classList.remove('hidden');
+  paintResults(); prefillCalc(); runCalc();
+  document.getElementById('results').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function totals(){
+  const kwh = A.months.reduce((s,m)=>s+m.kwh,0);
+  const cost = A.months.reduce((s,m)=>s+blockCost(m.kwh,tariff),0);
+  return {kwh, cost};
+}
+function renderSummary(){
+  const t = totals();
+  document.getElementById('sumLast').textContent = fmt2(A.lastA);
+  document.getElementById('sumKwh').textContent  = fmt1(t.kwh);
+  document.getElementById('sumCost').textContent = fmt0(t.cost);
+}
+
+function currentMonthInfo(){
+  const mo = A.months[A.months.length-1];
+  const fc = mo.days>0 ? mo.kwh/mo.days*mo.daysInMonth : 0;
+  return {mo, fc};
+}
+
+function renderAlerts(){
+  const box = document.getElementById('alerts'); box.innerHTML='';
+  const add = (html, ok)=>{
+    const div=document.createElement('div');
+    div.className='alert'+(ok?' ok':'');
+    div.innerHTML='<span class="led'+(ok?'':' on')+'"></span><span>'+html+'</span>';
+    box.appendChild(div);
+  };
+  // сначала — сомнения в самих данных: если файл прочитан неверно, остальное бессмысленно
+  const bad = implausibleDays(A.daily);
+  if (bad.length){
+    const worst = [...bad].sort((a,b)=>b.kwh-a.kwh)[0];
+    add(t('alert.implausible', {k: fmt1(worst.kwh), d: fmtD(worst.date), n: bad.length}));
+  }
+  // статусы счётчика
+  for (const s of A.statuses){
+    const range = fmtD(s.from) + (s.to ? ' — '+fmtD(s.to) : t('alert.range.now'));
+    const text = translateStatus(s.raw, lang);
+    add(t(s.to ? 'alert.status.closed' : 'alert.status.open', {s:text, r:range}), !!s.to);
+  }
+  // прогноз и граница блока
+  const {mo, fc} = currentMonthInfo();
+  if (mo.partial){
+    const cost = blockCost(fc, tariff);
+    let boundary = null, lower = 0;
+    for (const b of tariff){ if (b.upto!=null && fc < b.upto && b.upto - fc <= Math.max(30, fc*0.12)){ boundary=b.upto; break; } lower = b.upto; }
+    add(t('alert.month', {m:monthLabel(mo.y,mo.m,lang), k:fmt1(mo.kwh), d:mo.days, f:fmt1(fc), c:fmt0(cost)}), true);
+    if (boundary) add(t('alert.boundary', {b:fmt0(boundary)}));
+  }
+  // аномальные дни
+  const med = medianOf(A.daily.map(d=>d.kwh));
+  const anomalies = A.daily.filter(d=>med>0 && d.kwh > med*2.5);
+  if (anomalies.length){
+    const top = anomalies.sort((a,b)=>b.kwh-a.kwh).slice(0,3)
+      .map(d=>fmtD(d.date)+' ('+fmt1(d.kwh)+' '+t('unit.kwh')+')').join(', ');
+    const more = anomalies.length>3 ? t('alert.anomaly.more', {n:anomalies.length-3}) : '';
+    add(t('alert.anomaly', {m:fmt1(med), t:top, more}));
+  }
+  if (!box.children.length) add(t('alert.none'), true);
+}
+
+function renderMonthTable(){
+  const tb = document.querySelector('#monthTable tbody'); tb.innerHTML='';
+  let totKwh=0, totCost=0;
+  for (const mo of A.months){
+    const br = blockBreakdown(mo.kwh, tariff);
+    const cost = blockCost(mo.kwh, tariff);
+    totKwh+=mo.kwh; totCost+=cost;
+    const b4 = br[3].kwh+br[4].kwh+br[5].kwh;
+    const tag = mo.partial ? ' <span class="tag">'+fmtD(mo.from)+'–'+fmtD(mo.to)+'</span>' : '';
+    tb.insertAdjacentHTML('beforeend',
+      '<tr><td>'+monthLabel(mo.y,mo.m,lang)+tag+'</td><td class="num">'+fmt1(mo.kwh)+'</td>'+
+      '<td class="num">'+fmt1(br[0].kwh)+'</td><td class="num">'+fmt1(br[1].kwh)+'</td><td class="num">'+fmt1(br[2].kwh)+'</td><td class="num">'+fmt1(b4)+'</td>'+
+      '<td class="money">'+fmt0(cost)+'</td><td class="num">'+fmt1(mo.days?mo.kwh/mo.days:0)+'</td></tr>');
+  }
+  const {mo, fc} = currentMonthInfo();
+  if (mo.partial){
+    tb.insertAdjacentHTML('beforeend',
+      '<tr class="forecast"><td>'+t('table.forecast',{m:monthLabel(mo.y,mo.m,lang)})+'</td><td class="num">'+fmt1(fc)+'</td><td colspan="4"></td><td class="money">'+fmt0(blockCost(fc,tariff))+'</td><td class="num">'+fmt1(mo.days?mo.kwh/mo.days:0)+'</td></tr>');
+  }
+  tb.insertAdjacentHTML('beforeend',
+    '<tr class="total"><td>'+t('table.total')+'</td><td class="num">'+fmt1(totKwh)+'</td><td colspan="4"></td><td class="money">'+fmt0(totCost)+'</td><td></td></tr>');
+}
+
+/* Снимок графика для печати.
+   Chart.js рисует в canvas. На печати вёрстка меняет ширину и высоту .chart-box, canvas
+   от этого очищается, а перерисовка у Chart.js отложена до следующего кадра — которого
+   при печати уже не будет, и на бумагу уходит пустой прямоугольник. Событие beforeprint
+   помогло бы не везде (в headless-режиме оно не приходит вовсе), поэтому не полагаемся
+   на события: держим рядом статичную картинку и в печати показываем её вместо canvas.
+   Снимаем по окончании анимации — раньше canvas ещё не дорисован. */
+function snapshotChart(chart){
+  if (matchMedia('print').matches) return;      // не затирать хороший снимок пустым
+  const img = document.getElementById(chart.canvas.id + 'Img');
+  if (!img) return;
+  try{ img.src = chart.canvas.toDataURL('image/png'); }catch(e){}
+}
+/* Через плагин, а не через animation.onComplete: тот в Chart.js 4.4 не приходит вовсе.
+   afterRender зовётся на каждый кадр анимации, поэтому снимаем с задержкой — когда
+   кадры кончились и canvas дорисован. */
+const snapshotPlugin = {
+  id: 'printSnapshot',
+  afterRender(chart){
+    clearTimeout(chart.$snapTimer);
+    chart.$snapTimer = setTimeout(()=>snapshotChart(chart), 250);
+  }
+};
+
+/* Цвета берём из токенов, а не хардкодом: иначе графики не переживут смену темы. */
+const chartColors = () => {
+  const css = getComputedStyle(document.documentElement);
+  const get = n => css.getPropertyValue(n).trim();
+  return {accent:get('--accent'), money:get('--money'), warn:get('--warn'),
+          grid:get('--grid'), ink:get('--ink-soft')};
+};
+function renderCharts(){
+  const {accent:cAccent, money:cMoney, warn:cWarn, grid:cGrid, ink:cInk} = chartColors();
+  Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
+  Chart.defaults.color = cInk;
+
+  const labels = A.months.map(m=>monthNames(lang)[m.m].slice(0,3)+' '+String(m.y).slice(2));
+  const kwh = A.months.map(m=>+m.kwh.toFixed(1));
+  const cost = A.months.map(m=>blockCost(m.kwh,tariff));
+
+  charts.month?.destroy();
+  charts.month = new Chart(document.getElementById('chMonth'), {
+    plugins:[snapshotPlugin],
+    data:{labels, datasets:[
+      {type:'bar', label:t('unit.kwh'), data:kwh, backgroundColor:cAccent+'CC', borderRadius:4, yAxisID:'y'},
+      {type:'line', label:t('unit.sum'), data:cost, borderColor:cMoney, backgroundColor:cMoney, tension:.25, yAxisID:'y1', pointRadius:4}
+    ]},
+    options:{maintainAspectRatio:false,
+      scales:{
+        y:{title:{display:true,text:t('unit.kwh')}, grid:{color:cGrid}},
+        y1:{position:'right', title:{display:true,text:t('unit.sum')}, grid:{drawOnChartArea:false},
+            ticks:{callback:v=>fmt0(v)}}
+      },
+      // сравниваем по индексу набора: подпись зависит от языка
+      plugins:{tooltip:{callbacks:{label:c=>c.datasetIndex===1 ? t('chart.tooltip.cost',{v:fmt0(c.parsed.y)}) : t('chart.tooltip.kwh',{v:fmt1(c.parsed.y)})}}}
+    }
+  });
+
+  if (A.manual){ charts.daily?.destroy(); charts.daily = null; return; }  // суточных данных нет
+
+  const med = medianOf(A.daily.map(d=>d.kwh));
+  charts.daily?.destroy();
+  charts.daily = new Chart(document.getElementById('chDaily'), {
+    plugins:[snapshotPlugin],
+    type:'line',
+    data:{labels:A.daily.map(d=>fmtD(d.date)),
+      datasets:[{label:t('chart.daily'), data:A.daily.map(d=>+d.kwh.toFixed(2)),
+        borderColor:cAccent, backgroundColor:cAccent+'22', fill:true, tension:.2, borderWidth:1.5,
+        pointRadius:A.daily.map(d=>med>0&&d.kwh>med*2.5?3.5:0),
+        pointBackgroundColor:A.daily.map(d=>med>0&&d.kwh>med*2.5?cWarn:cAccent)}]},
+    options:{maintainAspectRatio:false,
+      scales:{x:{ticks:{maxTicksLimit:12}}, y:{grid:{color:cGrid}, title:{display:true,text:t('unit.kwh')}}},
+      plugins:{legend:{display:false}}}
+  });
+}
+
+/* ---------- тарифы ---------- */
+function renderTariff(){
+  const g = document.getElementById('tarifGrid'); g.innerHTML='';
+  let lower=0;
+  tariff.forEach((b,i)=>{
+    const u = t('unit.kwh');
+    const range = b.upto==null ? fmt0(lower)+'+ '+u : fmt0(lower)+'–'+fmt0(b.upto)+' '+u;
+    g.insertAdjacentHTML('beforeend',
+      '<span class="range">'+range+'</span>'+
+      '<span><input aria-label="'+t('tariff.price.aria',{n:i+1})+'" data-i="'+i+'" value="'+b.price+'" inputmode="numeric"> <span style="font-size:13px;color:var(--ink-soft)">'+t('tariff.unit')+'</span></span>');
+    lower = b.upto ?? lower;
+  });
+  g.querySelectorAll('input').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      const v = parseNum(inp.value);
+      if (isFinite(v) && v>=0){ tariff[+inp.dataset.i].price = v; saveTariff(); refresh(); }
+    });
+  });
+}
+document.getElementById('btnTarifReset').onclick = ()=>{
+  tariff = DEFAULT_TARIFF.map(b=>({...b})); saveTariff(); renderTariff(); refresh();
+};
+function refresh(){
+  if (A) paintResults();
+  runCalc();
+}
+
+/* ---------- калькулятор ---------- */
+const $ = id => document.getElementById(id);
+['cPrev','cCurr','cDays','cDaysM'].forEach(id=>$(id).addEventListener('input', runCalc));
+function prefillCalc(){
+  if (!A.rows.length) return;   // из ссылки и без показаний подставлять нечего
+  const {mo} = currentMonthInfo();
+  const startReading = A.rows.find(r=>r.date.getFullYear()===mo.y && r.date.getMonth()===mo.m && r.date.getDate()===1) || A.rows[0];
+  $('cPrev').value = fmt2(startReading.a).replace(/\u00A0/g,'');
+  $('cCurr').value = fmt2(A.lastA).replace(/\u00A0/g,'');
+  $('cDays').value = mo.days;
+  $('cDaysM').value = mo.daysInMonth;
+}
+function runCalc(){
+  const p = parseNum($('cPrev').value), c = parseNum($('cCurr').value);
+  const days = parseNum($('cDays').value), dim = parseNum($('cDaysM').value);
+  const out = $('oBlocks'); out.innerHTML='';
+  if (!isFinite(p) || !isFinite(c) || c < p){
+    $('oKwh').textContent = $('oCost').textContent = $('oFcKwh').textContent = $('oFcCost').textContent = '—';
+    $('oWarn').textContent = (isFinite(p)&&isFinite(c)&&c<p) ? t('calc.err.less') : '';
+    return;
+  }
+  const kwh = c - p;
+  $('oKwh').textContent = fmt1(kwh)+' '+t('unit.kwh');
+  blockBreakdown(kwh, tariff).forEach((b,i)=>{
+    if (b.kwh>0) out.insertAdjacentHTML('beforeend',
+      '<div class="calc-row"><span style="color:var(--ink-soft)">'+t('calc.block',{n:i+1, k:fmt1(b.kwh), p:fmt0(b.price)})+'</span><span class="v">'+fmt0(b.cost)+' '+t('unit.sum')+'</span></div>');
+  });
+  $('oCost').textContent = fmt0(blockCost(kwh,tariff))+' '+t('unit.sum');
+  if (isFinite(days) && days>0 && isFinite(dim) && dim>=days){
+    const fc = kwh/days*dim;
+    $('oFcKwh').textContent = fmt1(fc)+' '+t('unit.kwh');
+    $('oFcCost').textContent = fmt0(blockCost(fc,tariff))+' '+t('unit.sum');
+    let warn=''; let lower=0;
+    for (const b of tariff){ if (b.upto!=null && kwh < b.upto && fc >= b.upto){ warn=t('calc.warn.cross',{b:fmt0(b.upto), p:fmt0(tariff[tariff.indexOf(b)+1].price)}); break;} }
+    $('oWarn').textContent = warn;
+  } else {
+    $('oFcKwh').textContent = $('oFcCost').textContent = '—'; $('oWarn').textContent='';
+  }
+}
+
+/* ---------- экспорт и печать ---------- */
+document.getElementById('btnCsv').onclick = ()=>{
+  if (!A) return;
+  let csv = t('csv.header')+'\n';
+  let tk=0,tc=0;
+  for (const mo of A.months){
+    const cost = blockCost(mo.kwh,tariff); tk+=mo.kwh; tc+=cost;
+    csv += [monthLabel(mo.y,mo.m,lang), mo.kwh.toFixed(2).replace('.',','), cost, mo.days, (mo.days?mo.kwh/mo.days:0).toFixed(2).replace('.',',')].join(';')+'\n';
+  }
+  csv += [t('csv.total'), tk.toFixed(2).replace('.',','), tc, '', ''].join(';')+'\n';
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8'});
+  const aEl = document.createElement('a');
+  aEl.href = URL.createObjectURL(blob); aEl.download = t('csv.name'); aEl.click();
+  URL.revokeObjectURL(aEl.href);
+};
+document.getElementById('btnPrint').onclick = ()=>window.print();
+
+/* ---------- тема оформления ----------
+   Пока выбор не сделан, идём за системой. После первого клика — только выбор человека. */
+const themeBtn = document.getElementById('btnTheme');
+const isDark = () => document.documentElement.dataset.theme === 'dark';
+
+function paintTheme(){
+  document.getElementById('themeIcon').textContent = isDark() ? '☀' : '☾';
+  themeBtn.setAttribute('aria-pressed', String(isDark()));
+  // цвет строки состояния в мобильном браузере — под фон корпуса
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--housing').trim();
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', bg || '#1E5F74');
+}
+function setTheme(dark, remember){
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  if (remember){ try{ localStorage.setItem('svetuchet_theme_v1', dark ? 'dark' : 'light'); }catch(e){} }
+  paintTheme();
+  if (A) renderCharts();   // Chart.js рисует в canvas: сам он цвета не подхватит
+}
+themeBtn.onclick = ()=>setTheme(!isDark(), true);
+// системную тему слушаем, только пока пользователь не выбрал сам
+try{
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+    let saved = null;
+    try{ saved = localStorage.getItem('svetuchet_theme_v1'); }catch(_){}
+    if (!saved) setTheme(e.matches, false);
+  });
+}catch(e){}
+paintTheme();
+
+/* ---------- офлайн ----------
+   Регистрируем после load, чтобы не отнимать сеть у первой отрисовки.
+   Не работает на file:// — это нормально, приложение и без него полностью рабочее. */
+if ('serviceWorker' in navigator){
+  addEventListener('load', ()=>{ navigator.serviceWorker.register('./sw.js').catch(()=>{}); });
+}
+
+/* ---------- старт ---------- */
+applyLang(lang);   // сам вызовет renderTariff() и refresh()
+loadFromHash();    // пришли по присланной ссылке — покажем расчёт из неё
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- ЖК-панель счётчика: те же цвета, что в :root у index.html -->
+  <rect width="32" height="32" rx="7" fill="#1E5F74"/>
+  <rect x="5" y="9" width="22" height="14" rx="2.5" fill="#D9E4CF"/>
+  <g fill="#242F21">
+    <rect x="7.5" y="12" width="7" height="2.2" rx="1"/>
+    <rect x="7.5" y="15.9" width="11" height="2.2" rx="1"/>
+    <rect x="7.5" y="19.8" width="5" height="1.6" rx=".8" opacity=".45"/>
+  </g>
+  <circle cx="23.5" cy="20.4" r="1.7" fill="#D2372E"/>
+</svg>

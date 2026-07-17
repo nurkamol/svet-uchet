@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ru">
+<!-- Исходник icon-192.png / icon-512.png для PWA. Пересобрать: см. README, раздел «PWA».
+     Поля вокруг рисунка — под maskable: Android обрезает икону кругом/сквиркой,
+     безопасная зона — центральные 80%. -->
+<head>
+<meta charset="UTF-8">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:512px;height:512px;background:#1E5F74;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.lcd{
+  width:300px;height:196px;border-radius:22px;
+  background:linear-gradient(178deg,#D9E4CF,#C9D6BE);
+  box-shadow:inset 0 6px 22px rgba(36,47,33,.28);
+  padding:30px 32px;display:flex;flex-direction:column;justify-content:center;gap:16px;position:relative;
+}
+.bar{background:#242F21;border-radius:7px;height:22px}
+.bar.a{width:52%}
+.bar.b{width:82%}
+.bar.c{width:34%;opacity:.4;height:14px}
+.led{position:absolute;right:30px;bottom:28px;width:20px;height:20px;border-radius:50%;background:#D2372E}
+</style>
+</head>
+<body>
+  <div class="lcd">
+    <div class="bar a"></div>
+    <div class="bar b"></div>
+    <div class="bar c"></div>
+    <div class="led"></div>
+  </div>
+</body>
+</html>

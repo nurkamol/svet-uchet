@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Три языковые версии одной страницы. Каждая ссылается на все остальные через
+     xhtml:link rel="alternate" — этого требует Google для hreflang в sitemap. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://svet.nurkamol.com/</loc>
+    <xhtml:link rel="alternate" hreflang="ru" href="https://svet.nurkamol.com/"/>
+    <xhtml:link rel="alternate" hreflang="uz-Latn" href="https://svet.nurkamol.com/?lang=uz"/>
+    <xhtml:link rel="alternate" hreflang="uz-Cyrl" href="https://svet.nurkamol.com/?lang=uzc"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://svet.nurkamol.com/"/>
+    <changefreq>monthly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://svet.nurkamol.com/?lang=uz</loc>
+    <xhtml:link rel="alternate" hreflang="ru" href="https://svet.nurkamol.com/"/>
+    <xhtml:link rel="alternate" hreflang="uz-Latn" href="https://svet.nurkamol.com/?lang=uz"/>
+    <xhtml:link rel="alternate" hreflang="uz-Cyrl" href="https://svet.nurkamol.com/?lang=uzc"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://svet.nurkamol.com/"/>
+    <changefreq>monthly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://svet.nurkamol.com/?lang=uzc</loc>
+    <xhtml:link rel="alternate" hreflang="ru" href="https://svet.nurkamol.com/"/>
+    <xhtml:link rel="alternate" hreflang="uz-Latn" href="https://svet.nurkamol.com/?lang=uz"/>
+    <xhtml:link rel="alternate" hreflang="uz-Cyrl" href="https://svet.nurkamol.com/?lang=uzc"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://svet.nurkamol.com/"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+</urlset>

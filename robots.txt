@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://svet.nurkamol.com/sitemap.xml

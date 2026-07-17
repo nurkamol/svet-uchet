@@ -1,0 +1,11 @@
+# Зависимости тестов — ставятся через npm install
+tests/node_modules/
+
+# Локальные настройки Claude Code (личные разрешения, не для репозитория)
+.claude/settings.local.json
+
+# Временные файлы проверок
+.tmp-*
+
+# macOS
+.DS_Store

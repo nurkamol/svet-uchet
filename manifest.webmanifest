@@ -1,0 +1,20 @@
+{
+  "name": "Свет·Учёт — анализ показаний электросчётчика",
+  "short_name": "Свет·Учёт",
+  "description": "Выгрузка со счётчика → расход по месяцам, оплата по блочному тарифу, графики и прогноз. Всё считается в браузере.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#EFF2F0",
+  "theme_color": "#1E5F74",
+  "lang": "ru",
+  "dir": "ltr",
+  "categories": ["utilities", "finance", "productivity"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
