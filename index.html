@@ -342,6 +342,13 @@ tr.forecast td{color:var(--ink-soft);font-style:italic;background:var(--forecast
 .cmp-modes button[aria-pressed="true"]+button{border-left-color:var(--accent)}
 .cmp-legend{display:flex;align-items:center;gap:10px;margin:14px 0;flex-wrap:wrap}
 .cmp-arrow{color:var(--ink-soft);font-family:'IBM Plex Mono'}
+/* режим тарифа над таблицей по месяцам */
+.cost-mode{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.cost-mode-lbl{font-size:14px;color:var(--ink-soft)}
+.cost-mode .cmp-modes{margin-bottom:0}
+.cost-mode .cmp-modes button{padding:6px 12px;font-size:13px}
+.cost-mode-note{flex-basis:100%;margin:0}
+
 td.up{color:var(--warn);font-weight:600}     /* стало больше — платить больше */
 td.down{color:var(--ok);font-weight:600}
 #cmpTable td.num,#cmpTable td.money{font-family:'IBM Plex Mono'}
@@ -680,6 +687,17 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
           <button class="btn no-print" id="btnShare" data-i18n="share.btn">Поделиться ссылкой</button>
           <button class="btn no-print" id="btnCsv" data-i18n="btn.csv">Скачать CSV</button>
         </div>
+
+        <!-- Режим тарифа: виден только когда в периоде есть месяцы не по текущей цене -->
+        <div id="costModeSw" class="cost-mode no-print hidden">
+          <span class="cost-mode-lbl" data-i18n="cost.label">Считать:</span>
+          <div class="cmp-modes" role="group" data-i18n-aria="cost.aria">
+            <button type="button" data-cost="historical" data-i18n="cost.hist">по тарифу каждого месяца</button>
+            <button type="button" data-cost="current" data-i18n="cost.cur">весь период по текущему</button>
+          </div>
+          <span class="cost-mode-note note hidden" id="costModeNote" data-i18n="cost.note">Показан весь период по действующему тарифу — так иногда пересчитывает поставщик. Точные суммы за прошлые месяцы — в режиме «по тарифу каждого месяца».</span>
+        </div>
+
         <!-- Ссылка-шэринг: человек должен видеть, что именно уедет получателю -->
         <div id="shareBox" class="share-box hidden no-print">
           <div class="share-row">
@@ -1266,6 +1284,9 @@ ru:{
   'sum.last':'Последнее показание','sum.kwh':'Потреблено за период','sum.cost':'Итого по тарифу',
   'sec.alerts':'Предупреждения','sec.months':'По месяцам',
   'sec.months.sub':'блочный тариф считается заново каждый календарный месяц',
+  'cost.label':'Считать:','cost.aria':'Режим тарифа',
+  'cost.hist':'по тарифу каждого месяца','cost.cur':'весь период по текущему',
+  'cost.note':'Показан весь период по действующему тарифу — так иногда пересчитывает поставщик. Точные суммы за прошлые месяцы — в режиме «по тарифу каждого месяца».',
   'btn.csv':'Скачать CSV',
   'th.month':'Месяц','th.kwh':'Потреблено, кВт·ч','th.b1':'Блок 1','th.b2':'Блок 2','th.b3':'Блок 3',
   'th.b4':'Блок 4+','th.cost':'К оплате, сум','th.avg':'Сут. средн.',
@@ -1385,6 +1406,9 @@ uz:{
   'sum.last':'Oxirgi ko’rsatkich','sum.kwh':'Davr ichida iste’mol','sum.cost':'Tarif bo’yicha jami',
   'sec.alerts':'Ogohlantirishlar','sec.months':'Oylar bo’yicha',
   'sec.months.sub':'blokli tarif har kalendar oyda qaytadan hisoblanadi',
+  'cost.label':'Hisoblash:','cost.aria':'Tarif rejimi',
+  'cost.hist':'har oy o’z tarifi bilan','cost.cur':'butun davr joriy tarif bilan',
+  'cost.note':'Butun davr joriy tarif bilan ko’rsatilgan — yetkazib beruvchi ba’zan shunday qayta hisoblaydi. O’tgan oylarning aniq summalari «har oy o’z tarifi bilan» rejimida.',
   'btn.csv':'CSV yuklab olish',
   'th.month':'Oy','th.kwh':'Iste’mol, kVt·soat','th.b1':'Blok 1','th.b2':'Blok 2','th.b3':'Blok 3',
   'th.b4':'Blok 4+','th.cost':'To’lovga, so’m','th.avg':'Kunlik o’rt.',
@@ -1504,6 +1528,9 @@ uzc:{
   'sum.last':'Охирги кўрсаткич','sum.kwh':'Давр ичида истеъмол','sum.cost':'Тариф бўйича жами',
   'sec.alerts':'Огоҳлантиришлар','sec.months':'Ойлар бўйича',
   'sec.months.sub':'блокли тариф ҳар календар ойда қайтадан ҳисобланади',
+  'cost.label':'Ҳисоблаш:','cost.aria':'Тариф режими',
+  'cost.hist':'ҳар ой ўз тарифи билан','cost.cur':'бутун давр жорий тариф билан',
+  'cost.note':'Бутун давр жорий тариф билан кўрсатилган — етказиб берувчи баъзан шундай қайта ҳисоблайди. Ўтган ойларнинг аниқ суммалари «ҳар ой ўз тарифи билан» режимида.',
   'btn.csv':'CSV юклаб олиш',
   'th.month':'Ой','th.kwh':'Истеъмол, кВт·соат','th.b1':'Блок 1','th.b2':'Блок 2','th.b3':'Блок 3',
   'th.b4':'Блок 4+','th.cost':'Тўловга, сўм','th.avg':'Кунлик ўрт.',
@@ -1734,9 +1761,23 @@ function saveOverrides(){
 
 /* Тариф месяца. Данные из ссылки считаем ценами отправителя: получатель обязан увидеть
    его цифры, а не свои — иначе ссылка врёт. */
-const tariffOf = mo => (A && A.shared)
-  ? tariffFor(mo.y, mo.m, A.shareHouse, A.sharePrices)
-  : tariffFor(mo.y, mo.m, house, overrides[house]);
+/* 'historical' — каждый месяц по цене своего времени (по умолчанию, совпадает с архивом).
+   'current' — весь период по действующему тарифу: так иногда пересчитывает поставщик. */
+let costMode = 'historical';
+const tariffOf = mo => {
+  // в режиме 'current' берём новейший период (год 2999 гарантированно в него попадает)
+  const y = costMode === 'current' ? 2999 : mo.y;
+  const m = costMode === 'current' ? 0 : mo.m;
+  return (A && A.shared)
+    ? tariffFor(y, m, A.shareHouse, A.sharePrices)
+    : tariffFor(y, m, house, overrides[house]);
+};
+/* Есть ли в выгрузке месяцы не по текущему тарифу — только тогда переключалка имеет смысл. */
+function hasMixedTariff(months){
+  const h = (A && A.shared) ? A.shareHouse : house;
+  const newest = TARIFF_PRICES[h] ? TARIFF_PRICES[h][0] : TARIFF_PRICES.regular[0];
+  return months.some(mo => tariffPeriod(mo.y, mo.m, h) !== newest);
+}
 /* Цены «сейчас» — для калькулятора и редактируемой карточки. */
 const today = new Date();
 const currentTariff = () => tariffFor(today.getFullYear(), today.getMonth(), house, overrides[house]);
@@ -2263,18 +2304,22 @@ function renderAlerts(){
   }
   /* Период пересекает смену тарифа — сказать об этом. Иначе человек увидит, что за
      одинаковый расход в разные месяцы начислено разное, и решит, что мы ошиблись. */
-  const periods = tariffPeriodsUsed(A.months);
-  if (periods.length > 1){
-    // смен могло быть несколько (май 2024 и июнь 2026) — перечисляем все даты
-    const dates = periods.map(p => p.from).filter(Boolean).sort()
-      .map(d => fmtD(new Date(d))).join(', ');
-    add(t('alert.tariff.changed', {d: dates}), true);
-  }
-  /* Месяцы старше известных цен: считаем по ближайшему набору, но честно предупреждаем,
-     что для них тариф мог быть другим (и сумма скорее завышена). */
-  const oldMonths = monthsBeforeKnownTariff(A.months);
-  if (oldMonths.length){
-    add(t('alert.tariff.old', {d: fmtD(new Date(TARIFF_KNOWN_FROM)), n: oldMonths.length}));
+  /* Тарифные предупреждения — только в режиме «по каждому месяцу». В режиме «весь по
+     текущему» они бы противоречили показанным цифрам; там всё объясняет своя пометка. */
+  if (costMode === 'historical'){
+    const periods = tariffPeriodsUsed(A.months);
+    if (periods.length > 1){
+      // смен могло быть несколько (май 2024, май 2025, июнь 2026) — перечисляем все даты
+      const dates = periods.map(p => p.from).filter(Boolean).sort()
+        .map(d => fmtD(new Date(d))).join(', ');
+      add(t('alert.tariff.changed', {d: dates}), true);
+    }
+    /* Месяцы старше известных цен: считаем по ближайшему набору, но честно предупреждаем,
+       что для них тариф мог быть другим (и сумма скорее завышена). */
+    const oldMonths = monthsBeforeKnownTariff(A.months);
+    if (oldMonths.length){
+      add(t('alert.tariff.old', {d: fmtD(new Date(TARIFF_KNOWN_FROM)), n: oldMonths.length}));
+    }
   }
   // статусы счётчика
   for (const s of A.statuses){
@@ -2304,7 +2349,23 @@ function renderAlerts(){
   if (!box.children.length) add(t('alert.none'), true);
 }
 
+/* Переключалка режима тарифа: только если период смешанный. Иначе прячем и держим
+   режим historical, чтобы у свежих выгрузок ничего лишнего не появлялось. */
+function renderCostMode(){
+  const sw = document.getElementById('costModeSw');
+  const mixed = A && hasMixedTariff(A.months);
+  sw.classList.toggle('hidden', !mixed);
+  if (!mixed) costMode = 'historical';
+  sw.querySelectorAll('[data-cost]').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.cost === costMode)));
+  document.getElementById('costModeNote').classList.toggle('hidden', costMode !== 'current');
+}
+document.querySelectorAll('#costModeSw [data-cost]').forEach(b=>{
+  b.onclick = ()=>{ costMode = b.dataset.cost; if (A) paintResults(); };
+});
+
 function renderMonthTable(){
+  renderCostMode();
   const tb = document.querySelector('#monthTable tbody'); tb.innerHTML='';
   let totKwh=0, totCost=0;
   for (const mo of A.months){
