@@ -498,7 +498,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
   .lcd{box-shadow:none;border:1px solid var(--lcd-edge)}
   .lcd .digits .ghost{display:none}      /* «призрак» 8888 на бумаге — грязь */
 
-  /* На бумагу идёт снимок графика, а не живой canvas: см. snapshotChart(). */
+  /* На бумагу идёт снимок графика (светлая палитра), а не живой canvas: см. printSnapshot(). */
   .chart-box{height:auto}
   .chart-box canvas{display:none!important}
   .chart-print{display:block!important;width:100%;height:auto;max-height:200px;object-fit:contain}
@@ -2063,25 +2063,27 @@ function renderCompare(){
   renderCmpChart(c);
 }
 
-function renderCmpChart(c){
-  const {accent:cAccent, money:cMoney, grid:cGrid} = chartColors();
+function cmpChartConfig(c, p){
   const labels = c.rows.map(r => cmpMode === 'year'
     ? monthNames(lang)[r.a.m].slice(0,3)
     : monthNames(lang)[r.a.m].slice(0,3)+'→'+monthNames(lang)[r.b.m].slice(0,3));
-  charts.cmp?.destroy();
-  charts.cmp = new Chart(document.getElementById('chCmp'), {
-    plugins:[snapshotPlugin],
+  return {
     type:'bar',
     data:{labels, datasets:[
       {label: sourceLabel(),
-       data: c.rows.map(r=>+r.a.kwh.toFixed(1)), backgroundColor:cAccent+'99', borderRadius:4},
+       data: c.rows.map(r=>+r.a.kwh.toFixed(1)), backgroundColor:p.accent+'99', borderRadius:4},
       {label: fileNameB || 'B',
-       data: c.rows.map(r=>+r.b.kwh.toFixed(1)), backgroundColor:cMoney+'CC', borderRadius:4},
+       data: c.rows.map(r=>+r.b.kwh.toFixed(1)), backgroundColor:p.money+'CC', borderRadius:4},
     ]},
     options:{maintainAspectRatio:false,
-      scales:{y:{title:{display:true, text:t('unit.kwh')}, grid:{color:cGrid}}},
+      scales:{y:{title:{display:true, text:t('unit.kwh')}, grid:{color:p.grid}}},
       plugins:{tooltip:{callbacks:{label:x=>x.dataset.label+': '+fmt1(x.parsed.y)+' '+t('unit.kwh')}}}}
-  });
+  };
+}
+function renderCmpChart(c){
+  charts.cmp?.destroy();
+  charts.cmp = new Chart(document.getElementById('chCmp'), cmpChartConfig(c, chartColors()));
+  printSnapshot('chCmp', cmpChartConfig(c, PRINT_CHART));
 }
 
 /* ---------- демо ---------- */
@@ -2262,28 +2264,23 @@ function renderMonthTable(){
 }
 
 /* Снимок графика для печати.
-   Chart.js рисует в canvas. На печати вёрстка меняет ширину и высоту .chart-box, canvas
-   от этого очищается, а перерисовка у Chart.js отложена до следующего кадра — которого
-   при печати уже не будет, и на бумагу уходит пустой прямоугольник. Событие beforeprint
-   помогло бы не везде (в headless-режиме оно не приходит вовсе), поэтому не полагаемся
-   на события: держим рядом статичную картинку и в печати показываем её вместо canvas.
-   Снимаем по окончании анимации — раньше canvas ещё не дорисован. */
-function snapshotChart(chart){
-  if (matchMedia('print').matches) return;      // не затирать хороший снимок пустым
-  const img = document.getElementById(chart.canvas.id + 'Img');
+   Chart.js рисует в canvas, а @media print прячет живой canvas (display:none) и делает
+   страницу светлой. Поэтому снять живой canvas на печати нельзя (он скрыт), а снятый на
+   экране в тёмной теме уносит на бумагу тёмную палитру. Решение: рядом с каждым графиком
+   держим <img> и рисуем в неё снимок на ОТДЕЛЬНОМ offscreen-canvas светлой палитрой —
+   во время обычной отрисовки, синхронно. От темы экрана и от печати это не зависит. */
+const PRINT_CHART = {accent:'#12414F', money:'#5E3D14', warn:'#A32219', grid:'#D8DEDB', ink:'#3A4A50'};
+function printSnapshot(canvasId, config){
+  const img = document.getElementById(canvasId + 'Img');
   if (!img) return;
-  try{ img.src = chart.canvas.toDataURL('image/png'); }catch(e){}
+  const cv = document.createElement('canvas');
+  cv.width = 1100; cv.height = 340;
+  // responsive:false + фиксированный размер → Chart.js рисует синхронно в конструкторе
+  const c = new Chart(cv, {...config,
+    options:{...config.options, animation:false, responsive:false, maintainAspectRatio:false}});
+  try{ img.src = cv.toDataURL('image/png'); }catch(e){}
+  c.destroy();
 }
-/* Через плагин, а не через animation.onComplete: тот в Chart.js 4.4 не приходит вовсе.
-   afterRender зовётся на каждый кадр анимации, поэтому снимаем с задержкой — когда
-   кадры кончились и canvas дорисован. */
-const snapshotPlugin = {
-  id: 'printSnapshot',
-  afterRender(chart){
-    clearTimeout(chart.$snapTimer);
-    chart.$snapTimer = setTimeout(()=>snapshotChart(chart), 250);
-  }
-};
 
 /* Цвета берём из токенов, а не хардкодом: иначе графики не переживут смену темы. */
 const chartColors = () => {
@@ -2292,49 +2289,56 @@ const chartColors = () => {
   return {accent:get('--accent'), money:get('--money'), warn:get('--warn'),
           grid:get('--grid'), ink:get('--ink-soft')};
 };
-function renderCharts(){
-  const {accent:cAccent, money:cMoney, warn:cWarn, grid:cGrid, ink:cInk} = chartColors();
-  Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
-  Chart.defaults.color = cInk;
-
+/* Конфиги графиков параметризованы палитрой: одни и те же данные рисуются и на экране
+   (цвета текущей темы), и в offscreen-снимок для печати (всегда светлые). */
+function monthChartConfig(p){
   const labels = A.months.map(m=>monthNames(lang)[m.m].slice(0,3)+' '+String(m.y).slice(2));
   const kwh = A.months.map(m=>+m.kwh.toFixed(1));
   const cost = A.months.map(m=>blockCost(m.kwh,tariffOf(m)));
-
-  charts.month?.destroy();
-  charts.month = new Chart(document.getElementById('chMonth'), {
-    plugins:[snapshotPlugin],
+  return {
     data:{labels, datasets:[
-      {type:'bar', label:t('unit.kwh'), data:kwh, backgroundColor:cAccent+'CC', borderRadius:4, yAxisID:'y'},
-      {type:'line', label:t('unit.sum'), data:cost, borderColor:cMoney, backgroundColor:cMoney, tension:.25, yAxisID:'y1', pointRadius:4}
+      {type:'bar', label:t('unit.kwh'), data:kwh, backgroundColor:p.accent+'CC', borderRadius:4, yAxisID:'y'},
+      {type:'line', label:t('unit.sum'), data:cost, borderColor:p.money, backgroundColor:p.money, tension:.25, yAxisID:'y1', pointRadius:4}
     ]},
     options:{maintainAspectRatio:false,
       scales:{
-        y:{title:{display:true,text:t('unit.kwh')}, grid:{color:cGrid}},
+        y:{title:{display:true,text:t('unit.kwh')}, grid:{color:p.grid}},
         y1:{position:'right', title:{display:true,text:t('unit.sum')}, grid:{drawOnChartArea:false},
             ticks:{callback:v=>fmt0(v)}}
       },
       // сравниваем по индексу набора: подпись зависит от языка
       plugins:{tooltip:{callbacks:{label:c=>c.datasetIndex===1 ? t('chart.tooltip.cost',{v:fmt0(c.parsed.y)}) : t('chart.tooltip.kwh',{v:fmt1(c.parsed.y)})}}}
     }
-  });
-
-  if (A.manual){ charts.daily?.destroy(); charts.daily = null; return; }  // суточных данных нет
-
+  };
+}
+function dailyChartConfig(p){
   const med = medianOf(A.daily.map(d=>d.kwh));
-  charts.daily?.destroy();
-  charts.daily = new Chart(document.getElementById('chDaily'), {
-    plugins:[snapshotPlugin],
+  return {
     type:'line',
     data:{labels:A.daily.map(d=>fmtD(d.date)),
       datasets:[{label:t('chart.daily'), data:A.daily.map(d=>+d.kwh.toFixed(2)),
-        borderColor:cAccent, backgroundColor:cAccent+'22', fill:true, tension:.2, borderWidth:1.5,
+        borderColor:p.accent, backgroundColor:p.accent+'22', fill:true, tension:.2, borderWidth:1.5,
         pointRadius:A.daily.map(d=>med>0&&d.kwh>med*2.5?3.5:0),
-        pointBackgroundColor:A.daily.map(d=>med>0&&d.kwh>med*2.5?cWarn:cAccent)}]},
+        pointBackgroundColor:A.daily.map(d=>med>0&&d.kwh>med*2.5?p.warn:p.accent)}]},
     options:{maintainAspectRatio:false,
-      scales:{x:{ticks:{maxTicksLimit:12}}, y:{grid:{color:cGrid}, title:{display:true,text:t('unit.kwh')}}},
+      scales:{x:{ticks:{maxTicksLimit:12}}, y:{grid:{color:p.grid}, title:{display:true,text:t('unit.kwh')}}},
       plugins:{legend:{display:false}}}
-  });
+  };
+}
+function renderCharts(){
+  const scr = chartColors();
+  Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
+  Chart.defaults.color = scr.ink;
+
+  charts.month?.destroy();
+  charts.month = new Chart(document.getElementById('chMonth'), monthChartConfig(scr));
+  printSnapshot('chMonth', monthChartConfig(PRINT_CHART));
+
+  if (A.manual){ charts.daily?.destroy(); charts.daily = null; return; }  // суточных данных нет
+
+  charts.daily?.destroy();
+  charts.daily = new Chart(document.getElementById('chDaily'), dailyChartConfig(scr));
+  printSnapshot('chDaily', dailyChartConfig(PRINT_CHART));
 }
 
 /* ---------- тарифы ---------- */
