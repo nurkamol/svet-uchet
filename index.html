@@ -1968,8 +1968,11 @@ document.getElementById('btnShare').onclick = async ()=>{
   const p = A.shared ? A.sharePrices : currentTariff().map(b => b.price);
   const url = location.origin + location.pathname +
               (lang === 'ru' ? '' : '?lang=' + lang) + '#d=' + encodeShare(A.months, h, p);
-  // На телефоне — родной «Поделиться» (Web Share API); иначе поле с копированием.
-  if (navigator.share){
+  // Родной «Поделиться» — только на сенсорных экранах (телефоны/планшеты). На десктопе,
+  // даже где navigator.share есть (Firefox/Chrome под Windows), поведение системного
+  // листа непредсказуемо, поэтому там всегда показываем поле с копированием.
+  const touch = matchMedia('(pointer: coarse)').matches;
+  if (navigator.share && touch){
     try{ await navigator.share({title: t('page.title'), url}); return; }
     catch(e){ if (e.name === 'AbortError') return; }   // отменил — просто закрываем
   }
