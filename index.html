@@ -865,6 +865,17 @@ const TARIFF_PRICES = {
 const HOUSE_TYPES = ['regular', 'stove'];
 const toTariff = prices => BLOCKS.map((upto, i) => ({upto, price: prices[i]}));
 
+/* Раньше этой даты цен мы не знаем. Калькулятор het.uz показывает только два набора;
+   более старый из них там назван «тарифы с 1 мая 2024». Значит цены до 1 мая 2024
+   нам неизвестны, а для тех месяцев мы применяем ближайший известный (более дорогой)
+   набор — то есть скорее завышаем. Об этом надо предупредить, а не показывать как факт. */
+const TARIFF_KNOWN_FROM = '2024-05-01';
+function monthsBeforeKnownTariff(months){
+  const [ky, km] = TARIFF_KNOWN_FROM.split('-').map(Number);
+  const bound = ky * 100 + (km - 1);
+  return months.filter(mo => mo.y * 100 + mo.m < bound);
+}
+
 /* Действующий тариф обычного дома: первый период в списке — самый новый. */
 const DEFAULT_TARIFF = toTariff(TARIFF_PRICES.regular[0].prices);
 
@@ -1244,6 +1255,7 @@ ru:{
   'house.note':'У домов с электроплитами нет газа, поэтому электричество им вдвое дешевле. Выберите свой тип — иначе счёт разойдётся вдвое.',
   'print.from':'с {d}','print.until':'до {d}',
   'alert.tariff.changed':'В периоде сменился тариф: месяцы до {d} посчитаны по прежним ценам, дальше — по новым. Так и должно быть — цены менял поставщик.',
+  'alert.tariff.old':'В выгрузке есть месяцы до {d} ({n}) — цен за то время мы не знаем. Эти месяцы посчитаны по ближайшему известному тарифу и, скорее всего, завышены: раньше электричество стоило дешевле. Точную сумму уточните у поставщика.',
   'tariff.note':'Цены можно править — таблица, графики и калькулятор пересчитаются сразу. Значения сохраняются в этом браузере.',
   'tariff.price.aria':'Цена блока {n}','tariff.unit':'сум/кВт·ч',
   'tariff.source':'Тарифы меняются. Актуальные цены — у поставщика: <a href="https://het.uz/ru/pages/calculator" target="_blank" rel="noopener noreferrer">het.uz</a>.',
@@ -1359,6 +1371,7 @@ uz:{
   'house.note':'Elektr plitali uylarda gaz yo’q, shuning uchun elektr ular uchun ikki barobar arzon. O’z turingizni tanlang — aks holda hisob ikki barobar farq qiladi.',
   'print.from':'{d} dan','print.until':'{d} gacha',
   'alert.tariff.changed':'Davr ichida tarif o’zgargan: {d} gacha bo’lgan oylar avvalgi narxlarda, keyingilari yangi narxlarda hisoblangan. Shunday bo’lishi kerak — narxlarni yetkazib beruvchi o’zgartirgan.',
+  'alert.tariff.old':'Yuklamada {d} gacha bo’lgan oylar bor ({n}) — o’sha davr narxlarini bilmaymiz. Bu oylar eng yaqin ma’lum tarif bo’yicha hisoblangan va, ehtimol, oshirib ko’rsatilgan: ilgari elektr arzonroq edi. Aniq summani yetkazib beruvchidan aniqlang.',
   'tariff.note':'Narxlarni o’zgartirish mumkin — jadval, grafiklar va kalkulyator darhol qayta hisoblanadi. Qiymatlar shu brauzerda saqlanadi.',
   'tariff.price.aria':'{n}-blok narxi','tariff.unit':'so’m/kVt·soat',
   'tariff.source':'Tariflar o’zgaradi. Dolzarb narxlar yetkazib beruvchida: <a href="https://het.uz/oz/pages/calculator" target="_blank" rel="noopener noreferrer">het.uz</a>.',
@@ -1474,6 +1487,7 @@ uzc:{
   'house.note':'Электр плитали уйларда газ йўқ, шунинг учун электр улар учун икки баробар арзон. Ўз турингизни танланг — акс ҳолда ҳисоб икки баробар фарқ қилади.',
   'print.from':'{d} дан','print.until':'{d} гача',
   'alert.tariff.changed':'Давр ичида тариф ўзгарган: {d} гача бўлган ойлар аввалги нархларда, кейингилари янги нархларда ҳисобланган. Шундай бўлиши керак — нархларни етказиб берувчи ўзгартирган.',
+  'alert.tariff.old':'Юкламада {d} гача бўлган ойлар бор ({n}) — ўша давр нархларини билмаймиз. Бу ойлар энг яқин маълум тариф бўйича ҳисобланган ва, эҳтимол, ошириб кўрсатилган: илгари электр арзонроқ эди. Аниқ суммани етказиб берувчидан аниқланг.',
   'tariff.note':'Нархларни ўзгартириш мумкин — жадвал, графиклар ва калькулятор дарҳол қайта ҳисобланади. Қийматлар шу браузерда сақланади.',
   'tariff.price.aria':'{n}-блок нархи','tariff.unit':'сўм/кВт·соат',
   'tariff.source':'Тарифлар ўзгаради. Долзарб нархлар етказиб берувчида: <a href="https://het.uz/oz/pages/calculator" target="_blank" rel="noopener noreferrer">het.uz</a>.',
@@ -2211,6 +2225,12 @@ function renderAlerts(){
   if (periods.length > 1){
     const changed = periods.map(p => p.from).filter(Boolean).sort();
     add(t('alert.tariff.changed', {d: fmtD(new Date(changed[0]))}), true);
+  }
+  /* Месяцы старше известных цен: считаем по ближайшему набору, но честно предупреждаем,
+     что для них тариф мог быть другим (и сумма скорее завышена). */
+  const oldMonths = monthsBeforeKnownTariff(A.months);
+  if (oldMonths.length){
+    add(t('alert.tariff.old', {d: fmtD(new Date(TARIFF_KNOWN_FROM)), n: oldMonths.length}));
   }
   // статусы счётчика
   for (const s of A.statuses){

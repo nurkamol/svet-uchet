@@ -11,7 +11,8 @@ const api = new Function(core +
   ' monthLabel, monthNames, MONTHS, DEFAULT_TARIFF, findCols, rowsFromCols, extractRows,' +
   ' implausibleDays, MAX_PLAUSIBLE_KWH_PER_DAY, compareMonths,' +
   ' monthsFromReadings, analyzeManual, encodeShare, decodeShare,' +
-  ' TARIFF_PRICES, BLOCKS, HOUSE_TYPES, tariffPeriod, tariffFor, toTariff};')();
+  ' TARIFF_PRICES, BLOCKS, HOUSE_TYPES, tariffPeriod, tariffFor, toTariff,' +
+  ' TARIFF_KNOWN_FROM, monthsBeforeKnownTariff};')();
 
 let failed = 0;
 function eq(name, got, want){
@@ -96,6 +97,19 @@ eq('правка применилась к текущему периоду', pri
 eq('правка НЕ трогает прошлое',             prices(2026, 3, 'regular', мои), [600, 800, 1000, 1500, 1750, 2000]);
 eq('правка обычного дома не влияет на электроплиты', prices(2026, 6, 'stove', undefined), [325, 450, 550, 800, 950, 1100]);
 eq('битая правка игнорируется', prices(2026, 6, 'regular', [1, 2]), [650, 900, 1100, 1600, 1900, 2200]);
+
+// --- месяцы старше известных цен (граница 1 мая 2024, дата с het.uz)
+const mo2 = (y, m) => ({y, m});
+eq('известная дата — 1 мая 2024', api.TARIFF_KNOWN_FROM, '2024-05-01');
+eq('апрель 2024 — старее известного', api.monthsBeforeKnownTariff([mo2(2024,3)]).length, 1);
+eq('май 2024 — уже известен', api.monthsBeforeKnownTariff([mo2(2024,4)]).length, 0);
+eq('2026 — точно известен', api.monthsBeforeKnownTariff([mo2(2026,0)]).length, 0);
+eq('2023 — старее', api.monthsBeforeKnownTariff([mo2(2023,11)]).length, 1);
+eq('фильтрует только старые из смеси',
+   api.monthsBeforeKnownTariff([mo2(2023,5), mo2(2024,3), mo2(2024,4), mo2(2026,0)]).map(x=>[x.y,x.m]),
+   [[2023,5],[2024,3]]);
+eq('свежая выгрузка — предупреждать не о чем',
+   api.monthsBeforeKnownTariff([mo2(2025,0), mo2(2025,1), mo2(2026,5)]).length, 0);
 
 // --- анализ: месячная агрегация накопительных показаний
 const rows = [];
