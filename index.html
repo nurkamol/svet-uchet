@@ -5,24 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <!-- Content-Security-Policy: подпирает обещание «данные не покидают браузер».
-     Главное здесь — connect-src 'none': страница физически не может никуда ничего
-     отправить. Ни fetch, ни XHR, ни WebSocket, ни sendBeacon. Даже если бы в код
-     проник чужой скрипт, выгрузку он не вынесет — браузер не даст.
-     img-src без внешних адресов закрывает обходной путь «утечка через URL картинки»,
-     form-action 'none' — через отправку формы.
+     Главное — connect-src 'none': страница физически не может ничего отправить.
+     Ни fetch, ни XHR, ни WebSocket, ни sendBeacon. Даже проникший чужой скрипт
+     выгрузку не вынесет — браузер не даст.
+
+     Шрифты и библиотеки вендорнуты в /assets, поэтому всё — 'self', внешних хостов
+     нет вовсе: ни один CDN и ни одна оптимизация вроде Cloudflare Fonts не могут
+     ни сломать сайт, ни подменить код. img-src без внешних адресов закрывает утечку
+     через URL картинки, form-action 'none' — через отправку формы.
 
      'unsafe-inline' в script-src — вынужденно: всё приложение это один инлайновый
-     скрипт, а хеш пришлось бы пересчитывать после каждой правки, что убило бы
-     деплой перетаскиванием без сборки. Поэтому вход закрываем экранированием (esc),
-     а выход — connect-src.
+     скрипт, а хеш пришлось бы пересчитывать после каждой правки, что убило бы деплой
+     перетаскиванием. Вход закрыт экранированием (esc), выход — connect-src.
 
-     Дублируется в _headers для Cloudflare Pages: там же то, чего мета не умеет
-     (frame-ancestors). При правке — менять оба места. -->
+     Дублируется в _headers для Cloudflare (там frame-ancestors и т.п.). При правке —
+     менять оба места; тест security.test.js их сверяет. -->
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'none';
-  script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net;
-  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net;
-  font-src https://fonts.gstatic.com https://cdn.jsdelivr.net;
+  script-src 'self' 'unsafe-inline';
+  style-src 'self' 'unsafe-inline';
+  font-src 'self';
   img-src 'self' data:;
   connect-src 'none';
   worker-src 'self';
@@ -78,27 +80,13 @@
 <meta name="twitter:title" content="Свет·Учёт — анализ показаний электросчётчика">
 <meta name="twitter:description" content="Выгрузка со счётчика → расход по месяцам, оплата по блочному тарифу, графики и прогноз. Всё считается в браузере.">
 <meta name="twitter:image" content="https://svet.nurkamol.com/og-image.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- Google Fonts — единственное место без integrity, и намеренно: их CSS отдаётся разным
-     в зависимости от браузера (проверено: у Chrome и старых UA разные хеши), поэтому
-     фиксированный хеш просто сломал бы шрифты. Ограничены через CSP. -->
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-
-<!-- SRI: браузер сверит хеш и откажется выполнять подменённый файл. Защита от
-     компрометации CDN — иначе чужой скрипт получил бы доступ к выгрузке пользователя.
-     crossorigin обязателен, без него проверка не работает.
-     Хеши привязаны к версии в URL: меняете версию — пересчитайте (см. README). -->
-<link href="https://cdn.jsdelivr.net/npm/dseg@0.46.0/css/dseg.css" rel="stylesheet"
-      integrity="sha384-hQhDV95Csi4psdLa/hWm+HM8l1ycIQlSJs4aea4dvJg+z6nCsAV0qItQNID/WdYB"
-      crossorigin="anonymous">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"
-        integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw"
-        crossorigin="anonymous"></script>
-<!-- Chart.js берём с jsdelivr: на cdnjs версии 4.4.4 нет (есть 4.4.1, затем 4.5.0) — ссылка отдавала 404. -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"
-        integrity="sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt"
-        crossorigin="anonymous"></script>
+<!-- Локальные шрифты и библиотеки: всё в /assets, внешних CDN нет.
+     Сайт не зависит ни от Google Fonts, ни от cdnjs/jsdelivr, ни от оптимизаций
+     хостинга — их сбой не сломает типографику и расчёты. SRI не нужен: файлы
+     свои (same-origin). Версии и как пересобрать — в README. -->
+<link href="/assets/fonts.css" rel="stylesheet">
+<script src="/assets/lib/xlsx.full.min.js"></script>
+<script src="/assets/lib/chart.umd.min.js"></script>
 <style>
 :root{
   --housing:#EFF2F0;        /* корпус счётчика */
@@ -1974,12 +1962,17 @@ function analyzeShared(months){
           firstDate: months[0].from, lastDate: months[months.length-1].to,
           firstA: 0, lastA: 0};
 }
-document.getElementById('btnShare').onclick = ()=>{
+document.getElementById('btnShare').onclick = async ()=>{
   if (!A) return;
   const h = A.shared ? A.shareHouse : house;
   const p = A.shared ? A.sharePrices : currentTariff().map(b => b.price);
   const url = location.origin + location.pathname +
               (lang === 'ru' ? '' : '?lang=' + lang) + '#d=' + encodeShare(A.months, h, p);
+  // На телефоне — родной «Поделиться» (Web Share API); иначе поле с копированием.
+  if (navigator.share){
+    try{ await navigator.share({title: t('page.title'), url}); return; }
+    catch(e){ if (e.name === 'AbortError') return; }   // отменил — просто закрываем
+  }
   document.getElementById('shareUrl').value = url;
   shareBox.classList.toggle('hidden');
   if (!shareBox.classList.contains('hidden')) document.getElementById('shareUrl').select();

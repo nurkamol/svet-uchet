@@ -1,9 +1,8 @@
 // Проверки безопасности, которые можно сделать статически, без браузера.
-// Ловят то, что легко разъезжается при правках: SRI-хеши, CSP в двух местах, экранирование.
+// Ловят то, что легко разъезжается при правках: CSP в двух местах, отсутствие внешних
+// ресурсов (всё вендорнуто в /assets), экранирование ввода пользователя.
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
-const crypto = require('crypto');
 
 const root = path.join(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
@@ -32,27 +31,36 @@ eq('CSP: картинки только свои и data:', meta['img-src'], "'se
 eq('CSP: формы никуда не отправить',   meta['form-action'], "'none'");
 eq('CSP: <base> не подменить',         meta['base-uri'], "'none'");
 eq('CSP: сайт не встроить в iframe',   meta['frame-ancestors'], "'none'");
-// Утечь можно и через картинку, и через форму — поэтому внешних адресов там быть не должно
-eq('CSP: в img-src нет внешних адресов',  /https?:/.test(meta['img-src']), false);
-eq('CSP: в connect-src нет внешних адресов', /https?:/.test(meta['connect-src']), false);
 eq('CSP: eval не разрешён', /unsafe-eval/.test(JSON.stringify(meta)), false);
 
-/* ---- SRI: у всех внешних скриптов и стилей должен быть integrity ----
-   Исключение — Google Fonts: их CSS отдаётся разным разным браузерам, и фиксированный
-   хеш сломал бы шрифты. Это осознанное решение, а не забывчивость. */
-const внешние = [...html.matchAll(/<(script|link)\b[^>]*?(?:src|href)="(https:\/\/[^"]+)"[^>]*>/g)]
-  .map(m => ({tag: m[0], url: m[2]}))
-  .filter(x => !/rel="(preconnect|icon|apple-touch-icon|manifest|canonical|alternate)"/.test(x.tag));
-
-for (const {tag, url} of внешние){
-  const google = url.startsWith('https://fonts.googleapis.com');
-  const есть = /integrity="sha384-/.test(tag);
-  if (google) eq('SRI: Google Fonts намеренно без integrity', есть, false);
-  else {
-    eq('SRI: есть integrity — ' + url.split('/').pop(), есть, true);
-    eq('SRI: есть crossorigin — ' + url.split('/').pop(), /crossorigin=/.test(tag), true);
-  }
+// Всё вендорнуто: ни в одной директиве не должно быть внешних адресов
+for (const d of ['script-src', 'style-src', 'font-src', 'img-src', 'connect-src']){
+  eq(`CSP: в ${d} нет внешних адресов`, /https?:/.test(meta[d] || ''), false);
 }
+eq('CSP: скрипты только свои', meta['script-src'], "'self' 'unsafe-inline'");
+eq('CSP: стили только свои',   meta['style-src'], "'self' 'unsafe-inline'");
+eq('CSP: шрифты только свои',  meta['font-src'], "'self'");
+
+/* ---- Никаких внешних ресурсов: всё в /assets, сайт автономен ----
+   Именно из-за внешнего Google Fonts прод один раз сломался (Cloudflare Fonts). */
+const внешниеСсылки = [...html.matchAll(/<(?:script|link)\b[^>]*?(?:src|href)="(https?:\/\/[^"]+)"[^>]*>/g)]
+  .map(m => m[1])
+  .filter(u => !/rel="(?:canonical|alternate)"/.test(html.slice(Math.max(0, html.indexOf(u)-80), html.indexOf(u)+u.length+20)));
+eq('нет внешних script/link (кроме canonical/hreflang)', внешниеСсылки, []);
+eq('шрифты подключены локально', /href="\/assets\/fonts\.css"/.test(html), true);
+eq('библиотеки подключены локально',
+   /src="\/assets\/lib\/xlsx[^"]*"/.test(html) && /src="\/assets\/lib\/chart[^"]*"/.test(html), true);
+
+/* ---- вендорнутые файлы реально лежат на диске ---- */
+for (const f of ['assets/fonts.css', 'assets/lib/xlsx.full.min.js', 'assets/lib/chart.umd.min.js',
+                 'assets/fonts/dseg7classic-regular.woff2']){
+  eq('файл на месте: ' + f, fs.existsSync(path.join(root, f)), true);
+}
+// каждый @font-face в fonts.css указывает на существующий woff2
+const fontsCss = fs.readFileSync(path.join(root, 'assets/fonts.css'), 'utf8');
+const woff2 = [...fontsCss.matchAll(/url\('\/assets\/fonts\/([^']+)'\)/g)].map(m => m[1]);
+const пропавшие = woff2.filter(n => !fs.existsSync(path.join(root, 'assets/fonts', n)));
+eq('все шрифты из fonts.css существуют (' + woff2.length + ')', пропавшие, []);
 
 /* ---- экранирование: содержимое файла пользователя не должно попадать в разметку сырым ---- */
 const ui = html.split('/* ============ /ЯДРО ============ */')[1];
@@ -61,30 +69,5 @@ eq('XSS: статус счётчика экранируется', /esc\(translat
 eq('XSS: esc покрывает опасные символы',
    ["&", "<", ">", '"', "'"].every(c => ui.includes(`'${c}'`) || ui.includes(`"${c}"`)), true);
 
-/* ---- SRI-хеши обязаны соответствовать тому, что реально лежит на CDN ----
-   Иначе после смены версии библиотеки приложение молча перестанет грузиться. */
-const скачать = url => new Promise((res, rej) => {
-  https.get(url, r => {
-    if (r.statusCode >= 300 && r.statusCode < 400 && r.headers.location)
-      return скачать(r.headers.location).then(res, rej);
-    if (r.statusCode !== 200) return rej(new Error('HTTP ' + r.statusCode));
-    const chunks = []; r.on('data', c => chunks.push(c));
-    r.on('end', () => res(Buffer.concat(chunks)));
-  }).on('error', rej);
-});
-
-(async () => {
-  for (const {tag, url} of внешние){
-    const m = tag.match(/integrity="sha384-([^"]+)"/);
-    if (!m) continue;
-    try {
-      const buf = await скачать(url);
-      const real = crypto.createHash('sha384').update(buf).digest('base64');
-      eq('SRI: хеш сходится с CDN — ' + url.split('/').pop(), real, m[1]);
-    } catch (e) {
-      console.log('  -- пропуск (сеть недоступна): ' + url.split('/').pop() + ' — ' + e.message);
-    }
-  }
-  console.log(failed ? `\n${failed} тест(ов) упало` : '\nВсе проверки безопасности прошли');
-  process.exit(failed ? 1 : 0);
-})();
+console.log(failed ? `\n${failed} тест(ов) упало` : '\nВсе проверки безопасности прошли');
+process.exit(failed ? 1 : 0);

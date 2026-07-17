@@ -66,25 +66,30 @@ python3 -m http.server 8731            # из корня репозитория
 
 Через `file://` не сработает: карточке нужны шрифты с CDN.
 
-## Безопасность
+## Безопасность и автономность
 
 Обещание «данные не покидают браузер» подпёрто браузером, а не только текстом:
 CSP с `connect-src 'none'` физически запрещает странице отправлять что-либо наружу.
-Библиотеки с CDN подписаны через SRI — подменённый файл не выполнится.
 
-**Меняете версию библиотеки — пересчитайте хеш:**
+**Шрифты и библиотеки вендорнуты в `/assets`** — внешних CDN нет вовсе. Это и защита
+(ни один CDN или оптимизация хостинга не подменит код и не сломает сайт — на этом уже
+обжигались с Cloudflare Fonts), и автономность (сайт целиком работает офлайн). Поэтому
+CSP предельно строгий: `script-src`, `style-src`, `font-src` — только `'self'`.
 
-```bash
-curl -sL "https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" \
-  | openssl dgst -sha384 -binary | openssl base64 -A
-```
+`/assets` содержит:
+- `lib/xlsx.full.min.js` (SheetJS 0.18.5), `lib/chart.umd.min.js` (Chart.js 4.4.4);
+- `fonts/*.woff2` — Manrope 500/700/800, IBM Plex Sans/Mono 400/500/600 (диапазоны
+  latin, latin-ext, cyrillic, cyrillic-ext), DSEG7-Classic Regular;
+- `fonts.css` — все `@font-face`, ссылаются на локальные woff2.
 
-Готовое значение подставить в `integrity="sha384-…"`. Тест `npm run test:security`
-сверяет хеши с настоящим CDN и упадёт, если забыли.
+**Пересобрать шрифты** (при смене набора или весов): скачать библиотеки с их CDN в
+`assets/lib/`, шрифты — с `fonts.googleapis.com` (CSS с Chrome-User-Agent → woff2) в
+`assets/fonts/`, собрать `fonts.css` с локальными путями. Тест `npm run test:security`
+проверяет, что каждый `@font-face` указывает на существующий файл.
 
-CSP лежит в двух местах — мета-тег в `index.html` (работает на любом хостинге и при
-открытии файла напрямую) и `_headers` для Cloudflare Pages (там же то, чего мета не
-умеет). При правке менять оба; тест сверяет их между собой.
+CSP лежит в двух местах — мета-тег в `index.html` (работает при открытии файла напрямую)
+и `_headers` для Cloudflare (там же frame-ancestors). При правке менять оба; тест
+`security.test.js` сверяет их между собой.
 
 ## Разработка
 
@@ -101,6 +106,7 @@ favicon.svg         иконка
 robots.txt          для поисковиков
 sitemap.xml         три языковые версии страницы
 _headers            заголовки безопасности для Cloudflare Pages
+assets/             вендорнутые шрифты и библиотеки (сайт автономен, без CDN)
 tests/              тесты: ядро расчётов и безопасность (Node)
 tools/og-card.html  исходник og-image.png
 samples/demo.csv    синтетическая выгрузка для проверки

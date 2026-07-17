@@ -1,27 +1,27 @@
 /* Service worker: офлайн-работа и установка на телефон.
  *
  * Ничего никуда не отправляет — только кеширует. Обещание «данные не покидают браузер»
- * в силе: выгрузка пользователя сюда не попадает, кешируются лишь сама страница
- * и библиотеки с CDN.
+ * в силе: выгрузка пользователя сюда не попадает, кешируются лишь сама страница,
+ * шрифты и библиотеки — всё своё, из /assets.
  *
  * При правках index.html поднимайте VERSION — иначе у вернувшихся пользователей
  * останется старая копия оболочки.
+ *
+ * v3: шрифты и библиотеки вендорнуты в /assets (раньше грузились с CDN). Теперь всё
+ * same-origin — отдельная логика для CDN-хостов не нужна, её убрали. Смена версии
+ * заставляет старый SW переустановиться и подчистить прежние кеши.
  */
-/* v2: со сменой версии старый SW переустанавливается. Это важно после правки _headers —
-   прежний SW был установлен под connect-src 'none' и не мог кешировать; новый ставится
-   под свободным CSP и работает. Старые кеши подчистит activate. */
-const VERSION = 'v2';
+const VERSION = 'v3';
 const SHELL   = 'svetuchet-shell-' + VERSION;
-const RUNTIME = 'svetuchet-cdn-' + VERSION;
 
 const SHELL_URLS = [
   './', './index.html', './favicon.svg',
   './icon-192.png', './icon-512.png', './manifest.webmanifest',
+  // критичное для работы офлайн: без библиотек приложение не считает, без CSS — без стилей
+  './assets/fonts.css',
+  './assets/lib/xlsx.full.min.js',
+  './assets/lib/chart.umd.min.js',
 ];
-
-/* Версии зафиксированы прямо в URL (chart.js@4.4.4 и т.п.), поэтому содержимое
-   неизменно и его можно держать в кеше сколь угодно долго. */
-const CDN_HOSTS = ['cdnjs.cloudflare.com', 'cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
@@ -34,9 +34,8 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil((async () => {
-    const keep = [SHELL, RUNTIME];
     const names = await caches.keys();
-    await Promise.all(names.filter(n => n.startsWith('svetuchet-') && !keep.includes(n))
+    await Promise.all(names.filter(n => n.startsWith('svetuchet-') && n !== SHELL)
                            .map(n => caches.delete(n)));
     await self.clients.claim();
   })());
@@ -67,24 +66,8 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  /* Библиотеки и шрифты с CDN: сначала кеш — они неизменны. */
-  if (CDN_HOSTS.includes(url.hostname)) {
-    e.respondWith((async () => {
-      const hit = await caches.match(req);
-      if (hit) return hit;
-      try {
-        const res = await fetch(req);
-        // opaque (шрифты, стили без CORS) кладём тоже: статус не прочесть, но отдать можно
-        if (res.ok || res.type === 'opaque') (await caches.open(RUNTIME)).put(req, res.clone());
-        return res;
-      } catch (_) {
-        return new Response('', {status: 504});
-      }
-    })());
-    return;
-  }
-
-  /* Свои файлы: кеш, потом сеть. */
+  /* Всё остальное — свои файлы (шрифты, библиотеки, иконки): кеш, потом сеть.
+     Внешних ресурсов больше нет, всё вендорнуто в /assets. */
   if (url.origin === self.location.origin) {
     e.respondWith((async () => {
       const hit = await caches.match(req);
