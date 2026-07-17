@@ -384,6 +384,12 @@ input:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
 .calc-row.total .v{color:var(--money)}
 .note{font-size:13px;color:var(--ink-soft);margin-top:10px}
 
+/* Возможности: спокойная сетка коротких карточек, без иконок и акцентов */
+.feat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.feat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+.feat h3{font-size:15px;font-weight:700;margin-bottom:5px}
+.feat p{font-size:14px;color:var(--ink-soft);line-height:1.5}
+
 /* FAQ */
 details{border:1px solid var(--line);border-radius:8px;background:var(--panel);margin-bottom:10px}
 details summary{padding:14px 18px;font-weight:600;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
@@ -478,7 +484,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
 
   /* На бумаге не нужно ни интерактивное, ни рекламное: герой с лозунгом и вводным
      абзацем — это витрина сайта, а не отчёт. Показание из его ЖК есть ниже, в сводке. */
-  header,#hero,.no-print,footer,#faq,
+  header,#hero,.no-print,footer,#faq,#features,
   #mapper,#manual,.cmp-modes,#dailyCard,#tools{display:none!important}
 
   /* шапка отчёта — только в печати: на экране она была бы дублем */
@@ -791,6 +797,24 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
         <div class="calc-row"><span data-i18n="calc.fccost">Прогноз суммы за месяц</span><span class="v" id="oFcCost">—</span></div>
         <div class="note" id="oWarn"></div>
       </div>
+    </div>
+  </section>
+
+  <!-- ВОЗМОЖНОСТИ: справка внизу, а не баннер на первом экране -->
+  <section id="features">
+    <div class="sec-head"><h2 data-i18n="feat.title">Что умеет</h2></div>
+    <div class="feat-grid">
+      <div class="feat"><h3 data-i18n="feat.1.h">Расход и оплата по месяцам</h3><p data-i18n="feat.1.p">Блочный тариф считается заново каждый месяц; итог — в кВт·ч и сумах.</p></div>
+      <div class="feat"><h3 data-i18n="feat.2.h">Правильный тариф</h3><p data-i18n="feat.2.p">Обычный дом или дом с электроплитами, с учётом смены цен по дате.</p></div>
+      <div class="feat"><h3 data-i18n="feat.3.h">Графики и аномалии</h3><p data-i18n="feat.3.p">Расход по месяцам и по дням; необычно высокие дни подсвечены.</p></div>
+      <div class="feat"><h3 data-i18n="feat.4.h">Прогноз месяца</h3><p data-i18n="feat.4.p">Оценка расхода и суммы за текущий месяц и предупреждение о границе блока.</p></div>
+      <div class="feat"><h3 data-i18n="feat.5.h">Сравнение двух выгрузок</h3><p data-i18n="feat.5.p">Год к году или до/после — видно, что изменилось в расходе и в оплате.</p></div>
+      <div class="feat"><h3 data-i18n="feat.6.h">Ввод вручную</h3><p data-i18n="feat.6.p">Нет выгрузки — впишите показания на 1-е число по месяцам.</p></div>
+      <div class="feat"><h3 data-i18n="feat.7.h">Любой формат</h3><p data-i18n="feat.7.p">.xlsx, .xls, .csv; если колонки не опознаны — укажите их сами.</p></div>
+      <div class="feat"><h3 data-i18n="feat.8.h">Три языка и тёмная тема</h3><p data-i18n="feat.8.p">Русский, узбекский (латиница и кириллица); светлая и тёмная.</p></div>
+      <div class="feat"><h3 data-i18n="feat.9.h">Офлайн и на телефоне</h3><p data-i18n="feat.9.p">Работает без сети и ставится на домашний экран как приложение.</p></div>
+      <div class="feat"><h3 data-i18n="feat.10.h">Поделиться и сохранить</h3><p data-i18n="feat.10.p">Ссылка на результат без сервера, экспорт CSV, печать и PDF.</p></div>
+      <div class="feat"><h3 data-i18n="feat.11.h">Всё в браузере</h3><p data-i18n="feat.11.p">Файл никуда не отправляется — это не обещание, а ограничение браузера.</p></div>
     </div>
   </section>
 
@@ -1240,6 +1264,18 @@ ru:{
   'alert.anomaly':'Аномально высокие дни (больше 2,5× медианы {m} кВт·ч): {t}{more}. Стоит вспомнить, что включалось в эти дни.',
   'alert.anomaly.more':' и ещё {n}',
   'alert.none':'Замечаний нет: статусы чистые, расход ровный.',
+  'feat.title':'Что умеет',
+  'feat.1.h':'Расход и оплата по месяцам','feat.1.p':'Блочный тариф считается заново каждый месяц; итог — в кВт·ч и сумах.',
+  'feat.2.h':'Правильный тариф','feat.2.p':'Обычный дом или дом с электроплитами, с учётом смены цен по дате.',
+  'feat.3.h':'Графики и аномалии','feat.3.p':'Расход по месяцам и по дням; необычно высокие дни подсвечены.',
+  'feat.4.h':'Прогноз месяца','feat.4.p':'Оценка расхода и суммы за текущий месяц и предупреждение о границе блока.',
+  'feat.5.h':'Сравнение двух выгрузок','feat.5.p':'Год к году или до/после — видно, что изменилось в расходе и в оплате.',
+  'feat.6.h':'Ввод вручную','feat.6.p':'Нет выгрузки — впишите показания на 1-е число по месяцам.',
+  'feat.7.h':'Любой формат','feat.7.p':'.xlsx, .xls, .csv; если колонки не опознаны — укажите их сами.',
+  'feat.8.h':'Три языка и тёмная тема','feat.8.p':'Русский, узбекский (латиница и кириллица); светлая и тёмная.',
+  'feat.9.h':'Офлайн и на телефоне','feat.9.p':'Работает без сети и ставится на домашний экран как приложение.',
+  'feat.10.h':'Поделиться и сохранить','feat.10.p':'Ссылка на результат без сервера, экспорт CSV, печать и PDF.',
+  'feat.11.h':'Всё в браузере','feat.11.p':'Файл никуда не отправляется — это не обещание, а ограничение браузера.',
   'faq.title':'Как это читать',
   'faq.q1':'Почему показания «накопительные»?',
   'faq.a1':'Счётчик работает как одометр в машине: цифра только растёт. Расход за любой период — это показание на конец минус показание на начало. Выгрузка содержит снимок всех регистров каждый день в 00:00, поэтому показание на 1-е число месяца — это итог предыдущего месяца.',
@@ -1343,6 +1379,18 @@ uz:{
   'alert.anomaly':'G’ayrioddiy yuqori kunlar (mediana {m} kVt·soatdan 2,5× ko’p): {t}{more}. O’sha kunlari nima ishlaganini eslash kerak.',
   'alert.anomaly.more':' va yana {n} ta',
   'alert.none':'Izohlar yo’q: statuslar toza, iste’mol bir tekis.',
+  'feat.title':'Nima qila oladi',
+  'feat.1.h':'Oylar bo’yicha iste’mol va to’lov','feat.1.p':'Blokli tarif har oy qaytadan hisoblanadi; yakun — kVt·soat va so’mda.',
+  'feat.2.h':'To’g’ri tarif','feat.2.p':'Oddiy uy yoki elektr plitali uy, narx o’zgargan sanani hisobga olib.',
+  'feat.3.h':'Grafiklar va anomaliyalar','feat.3.p':'Oylar va kunlar bo’yicha iste’mol; g’ayrioddiy yuqori kunlar ajratilgan.',
+  'feat.4.h':'Oy prognozi','feat.4.p':'Joriy oy iste’moli va summasi bahosi hamda blok chegarasi ogohlantirishi.',
+  'feat.5.h':'Ikki yuklamani taqqoslash','feat.5.p':'Yildan yilga yoki oldin/keyin — iste’mol va to’lovda nima o’zgargani ko’rinadi.',
+  'feat.6.h':'Qo’lda kiritish','feat.6.p':'Yuklama yo’qmi — 1-sanadagi ko’rsatkichlarni oylab kiriting.',
+  'feat.7.h':'Har qanday format','feat.7.p':'.xlsx, .xls, .csv; ustunlar aniqlanmasa — o’zingiz ko’rsating.',
+  'feat.8.h':'Uch til va qorong’i mavzu','feat.8.p':'Rus, o’zbek (lotin va kirill); yorug’ va qorong’i.',
+  'feat.9.h':'Oflayn va telefonda','feat.9.p':'Internetsiz ishlaydi va ilova sifatida asosiy ekranga o’rnatiladi.',
+  'feat.10.h':'Ulashish va saqlash','feat.10.p':'Serversiz natija havolasi, CSV eksport, chop etish va PDF.',
+  'feat.11.h':'Hammasi brauzerda','feat.11.p':'Fayl hech qayerga yuborilmaydi — bu va’da emas, brauzer cheklovi.',
   'faq.title':'Buni qanday o’qish kerak',
   'faq.q1':'Nega ko’rsatkichlar «jamlanma»?',
   'faq.a1':'Hisoblagich mashinadagi odometr kabi ishlaydi: raqam faqat o’sadi. Istalgan davr uchun iste’mol — bu davr oxiridagi ko’rsatkichdan davr boshidagi ko’rsatkichni ayirish. Yuklamada har kuni soat 00:00 dagi barcha registrlar tasviri bo’ladi, shuning uchun oyning 1-sanasidagi ko’rsatkich — oldingi oyning yakuni.',
@@ -1446,6 +1494,18 @@ uzc:{
   'alert.anomaly':'Ғайриоддий юқори кунлар (медиана {m} кВт·соатдан 2,5× кўп): {t}{more}. Ўша кунлари нима ишлаганини эслаш керак.',
   'alert.anomaly.more':' ва яна {n} та',
   'alert.none':'Изоҳлар йўқ: статуслар тоза, истеъмол бир текис.',
+  'feat.title':'Нима қила олади',
+  'feat.1.h':'Ойлар бўйича истеъмол ва тўлов','feat.1.p':'Блокли тариф ҳар ой қайтадан ҳисобланади; якун — кВт·соат ва сўмда.',
+  'feat.2.h':'Тўғри тариф','feat.2.p':'Оддий уй ёки электр плитали уй, нарх ўзгарган санани ҳисобга олиб.',
+  'feat.3.h':'Графиклар ва аномалиялар','feat.3.p':'Ойлар ва кунлар бўйича истеъмол; ғайриоддий юқори кунлар ажратилган.',
+  'feat.4.h':'Ой прогнози','feat.4.p':'Жорий ой истеъмоли ва суммаси баҳоси ҳамда блок чегараси огоҳлантириши.',
+  'feat.5.h':'Икки юкламани таққослаш','feat.5.p':'Йилдан йилга ёки олдин/кейин — истеъмол ва тўловда нима ўзгаргани кўринади.',
+  'feat.6.h':'Қўлда киритиш','feat.6.p':'Юклама йўқми — 1-санадаги кўрсаткичларни ойлаб киритинг.',
+  'feat.7.h':'Ҳар қандай формат','feat.7.p':'.xlsx, .xls, .csv; устунлар аниқланмаса — ўзингиз кўрсатинг.',
+  'feat.8.h':'Уч тил ва қоронғи мавзу','feat.8.p':'Рус, ўзбек (лотин ва кирилл); ёруғ ва қоронғи.',
+  'feat.9.h':'Офлайн ва телефонда','feat.9.p':'Интернетсиз ишлайди ва илова сифатида асосий экранга ўрнатилади.',
+  'feat.10.h':'Улашиш ва сақлаш','feat.10.p':'Серверсиз натижа ҳаволаси, CSV экспорт, чоп этиш ва PDF.',
+  'feat.11.h':'Ҳаммаси браузерда','feat.11.p':'Файл ҳеч қаерга юборилмайди — бу ваъда эмас, браузер чеклови.',
   'faq.title':'Буни қандай ўқиш керак',
   'faq.q1':'Нега кўрсаткичлар «жамланма»?',
   'faq.a1':'Ҳисоблагич машинадаги одометр каби ишлайди: рақам фақат ўсади. Исталган давр учун истеъмол — бу давр охиридаги кўрсаткичдан давр бошидаги кўрсаткични айириш. Юкламада ҳар куни соат 00:00 даги барча регистрлар тасвири бўлади, шунинг учун ойнинг 1-санасидаги кўрсаткич — олдинги ойнинг якуни.',
